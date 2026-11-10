@@ -1,0 +1,49 @@
+name: Nexus 058 - MarcFlow contract compatibility (no deploy)
+on:
+  push:
+    branches:
+      - nexus/drawflow-marcflow-058-20261110
+permissions:
+  contents: read
+jobs:
+  cross-contract-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout experimental branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Pin Node 22 for TypeScript strip types
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+      - name: Original converter regression
+        run: node --test scripts/nexus/test-drawflow-converter.mjs
+      - name: Cross-check with actual main MarcFlow validator
+        run: node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Checkout pinned integrity validator PR 1 separately
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: Lucasom825/MarcFlow
+          ref: 6ed8c6b9b0ccf56dc3b41f2c618aed933fe7d566
+          path: integrity-validator
+          persist-credentials: false
+          sparse-checkout: |
+            src/modules/flows/types.ts
+      - name: Cross-check with proposed stricter PR 1 validator
+        env:
+          NEXUS_VALIDATOR_PATH: integrity-validator/src/modules/flows/types.ts
+        run: node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Check source and forbid production edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=c1fa9cfe4000e9a9cf0b2fa0a8fa5b3719f28538
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/nexus-changed.txt"
+          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-058-compatibility.yml$)' "$RUNNER_TEMP/nexus-changed.txt" ; then
+            echo 'Production file change refused'; exit 1
+          fi
+          test "$(wc -l < "$RUNNER_TEMP/nexus-changed.txt")" -eq 4
