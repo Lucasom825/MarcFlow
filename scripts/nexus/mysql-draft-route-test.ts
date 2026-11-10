@@ -186,6 +186,24 @@ async function main() {
       assert.equal(invalidRevision?.code, 400);
     });
 
+    // These inputs could be coerced by Number(...) in the old route.
+    const invalidValues: [string, unknown][] = [
+      ['numeric string', '3'],
+      ['null', null],
+      ['negative', -1],
+      ['fraction', 1.5],
+      ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+    ];
+    for (const [label, revision] of invalidValues) {
+      const invalid = await call('PUT', sessionId, flowId, KEY, { graph: validOne, revision });
+      prove('revision schema rejects ' + label, () => { assert.equal(invalid.code, 400); });
+    }
+    const unicodeOverflow = await call('PUT', sessionId, flowId, KEY,
+      JSON.stringify({ graph: validOne, revision: 3, extra: '😀'.repeat(560_000) }));
+    prove('UTF-8 byte limit rejects multibyte payload > 2 MB even with fewer code units', () => {
+      assert.equal(unicodeOverflow.code, 413);
+    });
+
     const last = await prisma.flow.findUniqueOrThrow({ where: { id: flowId } });
     prove('invalid revision left stored draft unchanged', () => {
       assert.equal(last.draftRevision, 3);
