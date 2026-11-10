@@ -65,6 +65,19 @@ const edgeTypes = { flow: FlowEdgeView };
 
 const toRfNodes = (g: FlowGraph): Node[] => g.nodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: n.data as Record<string, unknown>, deletable: n.type !== "start" }));
 const toRfEdges = (g: FlowGraph): Edge[] => g.edges.map(e => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, type: "flow" }));
+/**
+ * Stable JSON representation of FlowGraph. MySQL JSON columns may normalize object key
+ * ordering, which otherwise makes an unchanged graph look dirty on reload and triggers
+ * an extra PUT /draft. This comparison is semantic for JSON object key order only:
+ * array order, values, nodes, edges, and positions remain significant.
+ */
+const stableGraphJSON = (graph: FlowGraph): string => JSON.stringify(graph, (_, value) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+        return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+    }
+    return value;
+});
+
 const toGraph = (nodes: Node[], edges: Edge[]): FlowGraph => ({
     nodes: nodes.map(n => ({ id: n.id, type: n.type as NodeType, position: { x: Math.round(n.position.x), y: Math.round(n.position.y) }, data: n.data } as FlowNode)),
     edges: edges.map(e => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle || "next", target: e.target } as FlowEdge)),
@@ -78,7 +91,7 @@ export function FlowEditor({ sessionId, initial, initialMeta }: { sessionId: str
     const [meta, setMeta] = useState(initialMeta);
     const [name, setName] = useState(initial.name);
     const [status, setStatus] = useState(initial.status);
-    const [published, setPublished] = useState<string | null>(initial.publishedGraph ? JSON.stringify(initial.publishedGraph) : null);
+    const [published, setPublished] = useState<string | null>(initial.publishedGraph ? stableGraphJSON(initial.publishedGraph) : null);
     const [triggers, setTriggers] = useState<Trigger[]>(initial.triggers);
     const [panelId, setPanelId] = useState<string | null>(null);
     const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -89,13 +102,13 @@ export function FlowEditor({ sessionId, initial, initialMeta }: { sessionId: str
     const [busy, setBusy] = useState<"publish" | null>(null);
 
     const revision = useRef(initial.draftRevision);
-    const lastSaved = useRef(JSON.stringify(initial.draftGraph));
+    const lastSaved = useRef(stableGraphJSON(initial.draftGraph));
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const undo = useRef<string[]>([lastSaved.current]);
     const redo = useRef<string[]>([]);
 
     const graph = useMemo(() => toGraph(nodes, edges), [nodes, edges]);
-    const serialized = useMemo(() => JSON.stringify(graph), [graph]);
+    const serialized = useMemo(() => stableGraphJSON(graph), [graph]);
     const issues = useMemo(() => validateGraph(graph), [graph]);
     const errors = issues.filter(i => i.level === "error");
     const issuesByNode = useMemo(() => {
