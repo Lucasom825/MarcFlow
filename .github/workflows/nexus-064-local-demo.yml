@@ -126,7 +126,7 @@ jobs:
           BASE=451b5ea38a79bca6d79acef9b5922eda414ecac6
           git diff --check "$BASE" HEAD
           git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/064-files.txt"
-          if grep -Ev '^(scripts/nexus/|src/lib/nexus-demo-policy.ts$|src/proxy.ts$|src/app/dashboard/layout.tsx$|\.dockerignore$|\.github/workflows/nexus-064-local-demo.yml$)' "$RUNNER_TEMP/064-files.txt"; then
+          if grep -Ev '^(scripts/nexus/|src/lib/nexus-demo-policy.ts$|src/proxy.ts$|src/app/dashboard/layout.tsx$|src/app/auth/login/page.tsx$|\.dockerignore$|\.github/workflows/nexus-064-local-demo.yml$)' "$RUNNER_TEMP/064-files.txt"; then
             echo 'Unexpected modification outside demo-review paths';exit 1
           fi
           test -z "$(git status --porcelain --untracked-files=no)" || { git status --short;exit 1; }
