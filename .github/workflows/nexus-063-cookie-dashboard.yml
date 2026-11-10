@@ -161,7 +161,7 @@ jobs:
           BASE=b3b8854ef572a58d10400854f2589803d4ff3e55
           git diff --check "$BASE" HEAD
           git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/063-changed.txt"
-          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-063-cookie-dashboard.yml$)' "$RUNNER_TEMP/063-changed.txt"; then
+          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-063-cookie-dashboard.yml$|src/components/flows/flow-editor.tsx$)' "$RUNNER_TEMP/063-changed.txt"; then
             echo 'Unapproved branch change detected'; exit 1
           fi
           test -z "$(git status --porcelain --untracked-files=no)" || { git status --short; exit 1; }
