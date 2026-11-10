@@ -1,0 +1,181 @@
+name: NEXUS 063 - Real credentials cookie and original dashboard with disposable MySQL
+on:
+  push:
+    branches:
+      - nexus/cookie-dashboard-063-20261110
+permissions:
+  contents: read
+jobs:
+  cookie-dashboard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: nexus063_temporary_root
+          MYSQL_DATABASE: nexus063
+          MYSQL_USER: nexus063
+          MYSQL_PASSWORD: nexus063_temporary_only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -pnexus063_temporary_root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=18
+    env:
+      DATABASE_URL: mysql://nexus063:nexus063_temporary_only@127.0.0.1:3306/nexus063
+      AUTH_SECRET: NEXUS063_DISPOSABLE_AUTH_SECRET_GITHUB_CI_ONLY_NOT_USER_SECRET
+      AUTH_TRUST_HOST: 'true'
+      AUTH_URL: http://127.0.0.1:39163
+      NEXUS063_EPHEMERAL_ONLY: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      NODE_ENV: development
+      NEXT_PUBLIC_ALLOW_INDEXING: 'false'
+    steps:
+      - name: Checkout isolated review branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Pin Node.js 22 and npm cache
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Refuse nonlocal DB or real user environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DATABASE_URL" == 'mysql://nexus063:nexus063_temporary_only@127.0.0.1:3306/nexus063' ]]
+          [[ "$NEXUS063_EPHEMERAL_ONLY" == 'true' ]]
+          [[ "$AUTH_URL" == 'http://127.0.0.1:39163' ]]
+          echo 'NEXUS063_EPHEMERAL_AUTH_MYSQL_ONLY=true'
+      - name: Install locked dependencies without install scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Initialize disposable schema and hash synthetic user passwords
+        run: |
+          npx --no-install prisma generate
+          npx --no-install prisma db push --skip-generate
+          npx --no-install tsx scripts/nexus/seed-cookie-063.ts
+          npx --no-install tsx scripts/nexus/db-check-cookie-063.ts before
+      - name: Verify previous adapter and validation regressions
+        run: |
+          node --test scripts/nexus/test-drawflow-converter.mjs
+          node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Inject ONLY CI browser driver and remove dashboard update background effect
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp src/app/layout.tsx "$RUNNER_TEMP/063-root-layout.tsx"
+          cp src/app/dashboard/layout.tsx "$RUNNER_TEMP/063-dashboard-layout.tsx"
+          cp src/app/icon.tsx "$RUNNER_TEMP/063-icon.tsx"
+          rm src/app/icon.tsx
+          cp scripts/nexus/browser-driver-063.js public/nexus063-e2e.js
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/app/dashboard/layout.tsx')
+          s=p.read_text()
+          assert s.count('<UpdateChecker />')==1
+          # Side effect to check application updates is irrelevant to cookie/flow proof.
+          p.write_text(s.replace('<UpdateChecker />','{/* CI-only: background update checker excluded */}'))
+          PY
+          cat > src/app/layout.tsx <<'TEMP63'
+          import type { ReactNode } from "react";
+          import { SessionProvider } from "next-auth/react";
+          import "./globals.css";
+          export default function Root({children}:{children:ReactNode}){
+            return <html lang="pt-BR"><body style={{margin:0}}>
+              <SessionProvider>{children}</SessionProvider>
+              <script defer src="/nexus063-e2e.js"></script>
+            </body></html>;
+          }
+          TEMP63
+          echo 'NEXUS063_AUTH_AND_DASHBOARD_ORIGINAL_PAGES_PRESERVED=true'
+      - name: Run original Next.js credential authentication and dashboard on localhost
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install next dev --webpack -p 39163 -H 127.0.0.1 > "$RUNNER_TEMP/063-next.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/063-next.pid"
+          for n in $(seq 1 105); do
+            if curl -fsS --max-time 5 'http://127.0.0.1:39163/auth/login?callbackUrl=%2Fdashboard%2Fflows%2Fnexus063_owner_flow&nexus063=owner' -o "$RUNNER_TEMP/063-login.html"; then break; fi
+            sleep 1
+          done
+          test -s "$RUNNER_TEMP/063-login.html" || { tail -100 "$RUNNER_TEMP/063-next.log"; exit 1; }
+          echo 'NEXUS063_ORIGINAL_LOGIN_PAGE_READY=true'
+      - name: Assert unauthenticated dashboard blocked at real proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          HTTP="$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 'http://127.0.0.1:39163/dashboard/flows/nexus063_owner_flow')"
+          [[ "$HTTP" == '307' || "$HTTP" == '302' ]] || { echo "Dashboard without cookie was not redirected: $HTTP"; exit 1; }
+          API="$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 'http://127.0.0.1:39163/api/flows/nexus063_owner_session/nexus063_owner_flow')"
+          [[ "$API" == '401' ]] || { echo "Flow API without cookie was not denied: $API"; exit 1; }
+          echo 'NEXUS063_UNAUTHENTICATED_REQUESTS_BLOCKED=true'
+      - name: Real Chrome login form and original dashboard React Flow save/reload
+        shell: bash
+        run: |
+          set -euo pipefail
+          BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$BROWSER"
+          mkdir -p "$RUNNER_TEMP/063-owner-profile"
+          timeout 145 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --user-data-dir="$RUNNER_TEMP/063-owner-profile" --virtual-time-budget=50000 --window-size=1440,900 --dump-dom 'http://127.0.0.1:39163/auth/login?callbackUrl=%2Fdashboard%2Fflows%2Fnexus063_owner_flow&nexus063=owner' > "$RUNNER_TEMP/063-owner-dom.html" 2> "$RUNNER_TEMP/063-owner-chrome.log"
+          if ! grep -Fq 'data-nexus063="pass"' "$RUNNER_TEMP/063-owner-dom.html"; then
+            grep -o 'data-nexus063[^ >]*' "$RUNNER_TEMP/063-owner-dom.html" | head -15 || true
+            tail -80 "$RUNNER_TEMP/063-next.log"
+            echo 'Original login and dashboard owner E2E failed'; exit 1
+          fi
+          grep -Fq 'data-nexus063-role="owner"' "$RUNNER_TEMP/063-owner-dom.html"
+          grep -Fq 'data-nexus063-nodes="3"' "$RUNNER_TEMP/063-owner-dom.html"
+          grep -Fq 'data-nexus063-edges="1"' "$RUNNER_TEMP/063-owner-dom.html"
+          grep -Fq 'data-nexus063-published="false"' "$RUNNER_TEMP/063-owner-dom.html"
+          echo 'NEXUS063_REAL_LOGIN_COOKIE_EDITOR_AUTOSAVE_RELOAD_PASS=true'
+      - name: Confirm real DB persistence after browser and isolated other flow
+        run: npx --no-install tsx scripts/nexus/db-check-cookie-063.ts after
+      - name: Separate user login cannot access owner's flow or editor
+        shell: bash
+        run: |
+          set -euo pipefail
+          BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          mkdir -p "$RUNNER_TEMP/063-other-profile"
+          timeout 130 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --user-data-dir="$RUNNER_TEMP/063-other-profile" --virtual-time-budget=42000 --window-size=1440,900 --dump-dom 'http://127.0.0.1:39163/auth/login?callbackUrl=%2Fdashboard%2Fflows%2Fnexus063_owner_flow&nexus063=other' > "$RUNNER_TEMP/063-other-dom.html" 2> "$RUNNER_TEMP/063-other-chrome.log"
+          if ! grep -Fq 'data-nexus063="pass"' "$RUNNER_TEMP/063-other-dom.html"; then
+            grep -o 'data-nexus063[^ >]*' "$RUNNER_TEMP/063-other-dom.html" | head -15 || true
+            tail -80 "$RUNNER_TEMP/063-next.log"
+            echo 'Cross-user cookie test failed'; exit 1
+          fi
+          grep -Fq 'data-nexus063-role="other"' "$RUNNER_TEMP/063-other-dom.html"
+          grep -Fq 'data-nexus063-unauthorized="403"' "$RUNNER_TEMP/063-other-dom.html"
+          grep -Fq 'data-nexus063-owner-nodes="0"' "$RUNNER_TEMP/063-other-dom.html"
+          echo 'NEXUS063_REAL_COOKIE_CROSS_TENANT_DENIED=true'
+      - name: Final DB checks and permanent-source guard
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/063-root-layout.tsx" src/app/layout.tsx 2>/dev/null || true
+          cp "$RUNNER_TEMP/063-dashboard-layout.tsx" src/app/dashboard/layout.tsx 2>/dev/null || true
+          cp "$RUNNER_TEMP/063-icon.tsx" src/app/icon.tsx 2>/dev/null || true
+          rm -f public/nexus063-e2e.js
+          BASE=b3b8854ef572a58d10400854f2589803d4ff3e55
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/063-changed.txt"
+          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-063-cookie-dashboard.yml$)' "$RUNNER_TEMP/063-changed.txt"; then
+            echo 'Unapproved branch change detected'; exit 1
+          fi
+          test -z "$(git status --porcelain --untracked-files=no)" || { git status --short; exit 1; }
+          echo 'NEXUS063_MAIN_AND_PRODUCTION_TRACKED_FILES_UNCHANGED=true'
+      - name: Save scrubbed evidence without real customer data
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nexus-063-cookie-dashboard-evidence
+          path: |
+            ${{ runner.temp }}/063-owner-dom.html
+            ${{ runner.temp }}/063-other-dom.html
+            ${{ runner.temp }}/063-next.log
+            ${{ runner.temp }}/063-owner-chrome.log
+            ${{ runner.temp }}/063-other-chrome.log
+          retention-days: 3
