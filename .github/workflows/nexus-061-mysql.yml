@@ -1,0 +1,75 @@
+name: NEXUS 061 - Real MySQL draft route and optimistic concurrency
+on:
+  push:
+    branches:
+      - nexus/mysql-draft-contract-061-20261110
+permissions:
+  contents: read
+jobs:
+  mysql-draft:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: nexus061_root_only_for_disposable_ci
+          MYSQL_DATABASE: nexus061
+          MYSQL_USER: nexus061
+          MYSQL_PASSWORD: nexus061_only_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -pnexus061_root_only_for_disposable_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=18
+    env:
+      NODE_ENV: test
+      DATABASE_URL: mysql://nexus061:nexus061_only_ci@127.0.0.1:3306/nexus061
+      AUTH_SECRET: NEXUS061_TEST_ONLY_NOT_VALID_OUTSIDE_EPHEMERAL_CI_20261110
+      NEXUS061_EPHEMERAL_ONLY: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Checkout development branch (no production merge)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Pin Node and cache
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Guard against nonlocal DB target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DATABASE_URL" == "mysql://nexus061:nexus061_only_ci@127.0.0.1:3306/nexus061" ]]
+          [[ "$NEXUS061_EPHEMERAL_ONLY" == "true" ]]
+          echo 'NEXUS061_DATABASE_IS_ISOLATED_LOCAL_MYSQL=true'
+      - name: Install lockfile dependencies without postinstall side effects
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client
+        run: npx --no-install prisma generate
+      - name: Initialize schema in disposable MySQL database
+        run: npx --no-install prisma db push --skip-generate
+      - name: Existing public repository adapter regression
+        run: node --test scripts/nexus/test-drawflow-converter.mjs
+      - name: Existing graph contract regression
+        run: node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Invoke real authenticated draft and read routes against MySQL
+        run: npx --no-install tsx scripts/nexus/mysql-draft-route-test.ts
+      - name: Verify only experiment paths added
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=6886b46eb1fc27d6a3f79d552c44067a4a412377
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/nexus061-files.txt"
+          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-061-mysql.yml$)' "$RUNNER_TEMP/nexus061-files.txt"; then
+            echo 'Unexpected production change'; exit 1
+          fi
+          test -z "$(git status --porcelain --untracked-files=no)"
+          echo 'NEXUS061_REPO_MAIN_AND_PRODUCTION_UNCHANGED=true'
