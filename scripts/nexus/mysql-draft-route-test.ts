@@ -204,6 +204,23 @@ async function main() {
       assert.equal(unicodeOverflow.code, 413);
     });
 
+    const nullRoot = await call('PUT', sessionId, flowId, KEY, 'null');
+    prove('JSON null root returns HTTP 400 without throwing', () => { assert.equal(nullRoot.code, 400); });
+    const arrayRoot = await call('PUT', sessionId, flowId, KEY, '[]');
+    prove('JSON array root returns HTTP 400 without throwing', () => { assert.equal(arrayRoot.code, 400); });
+    const nullNode = await call('PUT', sessionId, flowId, KEY, {
+      graph: { nodes: [null], edges: [] }, revision: 3
+    });
+    prove('null graph node is rejected instead of crashing the handler', () => { assert.equal(nullNode.code, 400); });
+    const nullEdge = await call('PUT', sessionId, flowId, KEY, {
+      graph: { nodes: [validOne.nodes[0]], edges: [null] }, revision: 3
+    });
+    prove('null graph connection rejected without write', () => { assert.equal(nullEdge.code, 400); });
+    const missingRevision = await call('PUT', sessionId, flowId, KEY, { graph: validOne });
+    prove('missing revision rejected without write', () => { assert.equal(missingRevision.code, 400); });
+    const tooLargeRevision = await call('PUT', sessionId, flowId, KEY, { graph: validOne, revision: 3_000_000_000 });
+    prove('out-of-range MySQL integer revision is rejected', () => { assert.equal(tooLargeRevision.code, 400); });
+
     const last = await prisma.flow.findUniqueOrThrow({ where: { id: flowId } });
     prove('invalid revision left stored draft unchanged', () => {
       assert.equal(last.draftRevision, 3);
