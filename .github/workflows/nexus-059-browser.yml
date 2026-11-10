@@ -1,0 +1,73 @@
+name: Nexus 059 - Browser lab proof (read only)
+on:
+  push:
+    branches:
+      - nexus/drawflow-visual-lab-059-20261110
+permissions:
+  contents: read
+jobs:
+  browser-lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated NEXUS branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Pin Node 22.16
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+      - name: Run converter regression
+        run: node --test scripts/nexus/test-drawflow-converter.mjs
+      - name: Cross-validate against actual MarcFlow types
+        run: node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Start local-only lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXUS_LAB_PORT=48959 node --experimental-strip-types scripts/nexus/lab-server.mjs > "$RUNNER_TEMP/nexus-059-server.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/nexus-059.pid"
+          for n in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:48959/health > /dev/null; then break; fi
+            sleep 0.2
+          done
+          curl -fsS http://127.0.0.1:48959/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:48959/api/preview -H 'Content-Type: application/json' -d '{}')" = "403"
+      - name: Render and interact with lab in real headless Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$BROWSER" || { echo "No Chrome browser on runner"; exit 1; }
+          timeout 50 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=18000 --dump-dom 'http://127.0.0.1:48959/?e2e=1' > "$RUNNER_TEMP/nexus-059-dom.html" 2> "$RUNNER_TEMP/chrome-stderr.log"
+          grep -Fq 'data-e2e="pass"' "$RUNNER_TEMP/nexus-059-dom.html" || { tail -c 2800 "$RUNNER_TEMP/nexus-059-dom.html"; exit 1; }
+          timeout 35 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=8000 --window-size=1440,900 --screenshot="$RUNNER_TEMP/nexus-059-screenshot.png" 'http://127.0.0.1:48959/?example=1' > /dev/null 2>> "$RUNNER_TEMP/chrome-stderr.log"
+          test -s "$RUNNER_TEMP/nexus-059-screenshot.png"
+          echo "NEXUS_BROWSER_UI_E2E_PASS=true"
+      - name: Install pinned project dependencies with package scripts disabled
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Render actual MarcFlow diagnostic UI component from converted graph
+        run: npx --no-install tsx scripts/nexus/test-issues-integration.tsx
+      - name: Guard against changes outside pilot and browser test code
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=b09e6c3a4437ddec47b353b344359f9bf62acfea
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/nexus-059-changed.txt"
+          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-059-browser.yml$)' "$RUNNER_TEMP/nexus-059-changed.txt"; then
+            echo "Modification outside experimental test scope"; exit 1
+          fi
+      - name: Keep browser evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nexus-059-browser-evidence
+          path: |
+            ${{ runner.temp }}/nexus-059-dom.html
+            ${{ runner.temp }}/nexus-059-screenshot.png
+            ${{ runner.temp }}/nexus-059-server.log
+            ${{ runner.temp }}/chrome-stderr.log
+          retention-days: 3

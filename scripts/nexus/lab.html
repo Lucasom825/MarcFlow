@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXUS 059 · Flow Import Lab</title>
+<style>
+:root{font-family:Inter,"Segoe UI",system-ui,sans-serif;color:#17233b;background:#f4f7fc}
+*{box-sizing:border-box}body{margin:0}header{background:#0f1e38;color:white;padding:18px 28px;display:flex;gap:16px;align-items:center;justify-content:space-between}
+header .brand{font-size:20px;font-weight:800;letter-spacing:.04em}header small{color:#b8c9e4}
+main{max-width:1450px;margin:22px auto;padding:0 20px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:16px;margin:0 0 14px}p{line-height:1.45}
+.sub{margin:0 0 18px;color:#637289}
+.columns{display:grid;grid-template-columns:minmax(300px,440px) 1fr;gap:16px}
+.panel{background:#fff;border:1px solid #dce5f1;border-radius:14px;padding:19px;box-shadow:0 8px 20px #1c365812}
+label{display:block;font-size:13px;font-weight:700;margin:12px 0 7px}
+textarea{display:block;min-height:260px;width:100%;resize:vertical;padding:12px;border:1px solid #c8d3e2;border-radius:9px;background:#f9fbfe;color:#12233b;font:12px/1.55 ui-monospace,Consolas,monospace}
+button{background:#164ed7;border:1px solid #164ed7;color:#fff;border-radius:8px;padding:10px 13px;cursor:pointer;font-weight:700;font-size:13px}
+button.secondary{background:white;color:#173b7a;border-color:#cad8ec}
+button:disabled{background:#edf0f6;color:#8795a8;border-color:#dce4ef;cursor:not-allowed}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.banner{padding:12px 14px;border-radius:9px;background:#edf2fa;color:#42546d;border:1px solid #dce6f2}
+.banner[data-kind="pass"]{background:#e7f5ec;color:#155631;border-color:#a8ddba}
+.banner[data-kind="error"]{background:#fff0ef;color:#892b22;border-color:#f5b9b1}
+.kpis{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0}.kpi{padding:9px 12px;background:#edf3fb;border-radius:9px;min-width:100px}.kpi strong{display:block;font-size:20px}.kpi small{color:#546a85}
+.canvas{position:relative;min-height:370px;overflow:auto;border:1px dashed #cad7e8;border-radius:11px;background-color:#fbfcff;background-image:radial-gradient(#d9e2ef 1px,transparent 1px);background-size:20px 20px}
+.diagram{position:relative;min-width:600px;min-height:320px}
+.connections{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.node{position:absolute;width:220px;min-height:86px;border:1px solid #bed0e5;border-radius:10px;background:#fff;box-shadow:0 5px 15px #1d385c20;padding:12px}
+.node .node-type{display:block;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#647996}
+.node strong{display:block;font-size:15px;margin:6px 0}
+.node p{font-size:12px;color:#344b69;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.node[data-type="start"]{border-left:5px solid #64748b}
+.node[data-type="content"]{border-left:5px solid #3978e9}
+.node[data-type="action"]{border-left:5px solid #f59e0b}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.chip{font-size:12px;background:#edf0f7;color:#455570;padding:6px 9px;border-radius:999px}
+.notice{background:#fff9e9;border:1px solid #f4df9a;border-radius:10px;color:#766021;padding:11px 13px;font-size:12px;margin-top:12px}
+#findings{margin:8px 0 0;padding-left:17px;color:#4b607e;font-size:13px}
+#findings li{margin:7px 0}.empty{padding:110px 20px;text-align:center;color:#75859b}
+footer{font-size:12px;color:#74829a;margin:20px 0 32px}
+@media(max-width:850px){.columns{grid-template-columns:1fr}header{padding:14px}h1{font-size:22px}main{padding:0 12px}.diagram{min-width:550px}}
+</style>
+<script type="module" src="/lab.js"></script>
+</head>
+<body>
+<header><div class="brand">NEXUS <small>/ Flow Import Lab 059</small></div><small>Ambiente local · Somente leitura</small></header>
+<main>
+<h1>Prévia supervisionada de fluxo</h1>
+<p class="sub">Drawflow público → conversor NEXUS → contrato real do MarcFlow. Nenhuma publicação ou envio de WhatsApp.</p>
+<div class="columns">
+<section class="panel" aria-label="Importação de JSON">
+<h2>1. Fonte Drawflow</h2>
+<p class="sub">Somente JSON anotado com <code>nexus.marcflow.v1</code>. Arquivos não anotados são recusados.</p>
+<div class="actions">
+<button id="load-example" type="button" class="secondary">Carregar exemplo</button>
+<button id="clear" type="button" class="secondary">Limpar</button>
+</div>
+<label for="json">JSON de entrada (máximo 500 kB)</label>
+<textarea id="json" spellcheck="false" placeholder='{"drawflow":{"Home":{"data":{...}}}}'></textarea>
+<div class="actions">
+<button id="analyze" type="button">Analisar e visualizar</button>
+<button id="download" type="button" class="secondary" disabled>Exportar prévia JSON</button>
+</div>
+<div id="status" class="banner" role="status" aria-live="polite" data-kind="idle">Aguardando análise. Nenhum dado foi enviado para sistemas externos.</div>
+<div class="notice">Teste visual da bancada, não do editor produtivo. A prévia não é uma publicação aprovada, mesmo quando passa na validação estrutural.</div>
+</section>
+<section class="panel" aria-label="Prévia visual de fluxo">
+<h2>2. Prévia MarcFlow — somente leitura</h2>
+<div class="kpis" id="metrics">
+<div class="kpi"><strong id="node-count">—</strong><small>Blocos</small></div>
+<div class="kpi"><strong id="edge-count">—</strong><small>Conexões</small></div>
+<div class="kpi"><strong id="warning-count">—</strong><small>Avisos</small></div>
+</div>
+<div class="canvas" id="canvas"><div class="empty" id="empty">Carregue o exemplo ou insira um JSON para ver o fluxo aqui.</div><div id="diagram" class="diagram" hidden></div></div>
+<div class="badges"><span class="chip">Sem banco</span><span class="chip">Sem WhatsApp</span><span class="chip">Sem execução de código externo</span><span class="chip">Sem merge/deploy</span></div>
+<h2>Diagnósticos</h2>
+<ul id="findings"><li>Sem análise.</li></ul>
+</section>
+</div>
+<footer>Referência: jerosoler/Drawflow MIT · SHA ef8a88cdfbf2010cc0b641b94278be6db413938b · Reprodução controlada e não equivalente ao sistema original.</footer>
+</main>
+</body></html>
