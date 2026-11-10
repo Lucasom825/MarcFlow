@@ -1,0 +1,151 @@
+name: NEXUS 064 - persistent localhost demo build and security smoke
+on:
+  push:
+    branches:
+      - nexus/local-demo-064-20261110
+permissions:
+  contents: read
+jobs:
+  demo-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout isolated NEXUS 064 branch only
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Pin Node.js 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Strict API firewall unit tests
+        run: node --experimental-strip-types --test scripts/nexus/test-demo-policy-064.mjs
+      - name: Original converter and graph contract regressions
+        run: |
+          node --test scripts/nexus/test-drawflow-converter.mjs
+          node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Compose prerequisites and isolated synthetic credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose version
+          cat > "$RUNNER_TEMP/064-ci.env" <<'TESTENV'
+          MYSQL_ROOT_PASSWORD=CI_ONLY_064_ROOT_FAKE_8f8022b79a
+          MYSQL_PASSWORD=CI_ONLY_064_USER_FAKE_48872abc28
+          AUTH_SECRET=CI_ONLY_064_AUTH_FAKE_ca4a7f05484735aaf71c979b42d7
+          NEXUS_DEMO_PASSWORD=CI_ONLY_064_OWNER_FAKE_9b848482b8ea70
+          TESTENV
+          chmod 600 "$RUNNER_TEMP/064-ci.env"
+          docker compose --env-file "$RUNNER_TEMP/064-ci.env" -f scripts/nexus/compose.demo-064.yml config --quiet
+          python3 - <<'PY'
+          from pathlib import Path
+          dockerignore=Path('.dockerignore').read_text()
+          assert '.env*' in dockerignore and 'data' in dockerignore
+          yml=Path('scripts/nexus/compose.demo-064.yml').read_text()
+          assert '127.0.0.1:39164:39164' in yml
+          assert 'mysql:8.0' in yml
+          assert 'NEXUS_DEMO_ONLY: "true"' in yml
+          assert 'src/server/index.ts' not in yml
+          assert 'npx --no-install next dev' in yml
+          assert 'MYSQL_DATABASE: nexus_demo' in yml
+          assert 'demo_mysql_data:/var/lib/mysql' in yml
+          assert 'ports:' in yml
+          assert yml.count('ports:')==1
+          print('NEXUS064_LOOPBACK_FIREWALL_NO_WHATSAPP_STARTUP=true')
+          PY
+      - name: Build demo image and start isolated persistent containers
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file "$RUNNER_TEMP/064-ci.env" -f scripts/nexus/compose.demo-064.yml up -d --build
+          for n in $(seq 1 140); do
+            if curl -fsS --max-time 4 http://127.0.0.1:39164/auth/login -o "$RUNNER_TEMP/064-login.html"; then break; fi
+            sleep 3
+          done
+          if ! test -s "$RUNNER_TEMP/064-login.html"; then
+            docker compose --env-file "$RUNNER_TEMP/064-ci.env" -f scripts/nexus/compose.demo-064.yml logs --tail 100 app
+            exit 1
+          fi
+          echo "NEXUS064_REAL_LOCAL_LOGIN_HTTP_READY=true"
+      - name: Verify firewall on actual Next proxy, no account creation or publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          root='http://127.0.0.1:39164'
+          status() { curl --max-time 30 --silent --output /dev/null --write-out '%{http_code}' "$@"; }
+          test "$(status "$root/auth/login")" = '200'
+          test "$(status "$root/api/flows/nexus_demo_session/nexus_demo_first_flow")" = '401'
+          test "$(status -X POST -H 'Content-Type: application/json' --data '{"email":"intruder@example.invalid","password":"fake123","name":"Fake"}' "$root/api/auth/register")" = '403'
+          test "$(status -X POST "$root/api/flows/nexus_demo_session/nexus_demo_first_flow/publish")" = '403'
+          test "$(status -X POST "$root/api/flows/nexus_demo_session/nexus_demo_first_flow/test")" = '403'
+          test "$(status -X POST "$root/api/system/check-updates")" = '403'
+          test "$(status -X POST "$root/api/sessions")" = '403'
+          test "$(status -X POST "$root/api/messages/send")" = '403'
+          echo 'NEXUS064_REAL_NEXT_DEMO_FIREWALL_PASS=true'
+      - name: Prove real Auth.js cookie draft API before restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(compose --env-file "$RUNNER_TEMP/064-ci.env" -f scripts/nexus/compose.demo-064.yml)
+          docker "${args[@]}" exec -T app npx --no-install tsx scripts/nexus/demo-persistence-proof-064.ts before
+          docker "${args[@]}" exec -T app node scripts/nexus/demo-cookie-http-proof-064.mjs
+          echo "NEXUS064_MYSQL_COOKIE_DRAFT_WRITTEN_BEFORE_RESTART=true"
+      - name: Stop and restart containers WITHOUT deleting named MySQL volume
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(compose --env-file "$RUNNER_TEMP/064-ci.env" -f scripts/nexus/compose.demo-064.yml)
+          docker "${args[@]}" down
+          docker "${args[@]}" up -d
+          for n in $(seq 1 100); do
+            if curl -fsS --max-time 5 http://127.0.0.1:39164/auth/login -o "$RUNNER_TEMP/064-restarted.html"; then break; fi
+            sleep 3
+          done
+          test -s "$RUNNER_TEMP/064-restarted.html" || {
+            docker "${args[@]}" logs --tail 100 app
+            exit 1
+          }
+          docker "${args[@]}" exec -T app npx --no-install tsx scripts/nexus/demo-persistence-proof-064.ts after
+          echo 'NEXUS064_DOCKER_DOWN_UP_PRESERVES_DRAFT=true'
+      - name: Capture original login screenshot (no user or secret data)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$BROWSER"
+          timeout 40 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=6000 --window-size=1365,900 --screenshot="$RUNNER_TEMP/064-login.png" "http://127.0.0.1:39164/auth/login" > /dev/null 2> "$RUNNER_TEMP/064-chrome.log"
+          test -s "$RUNNER_TEMP/064-login.png"
+          echo 'NEXUS064_ORIGINAL_LOGIN_RENDERED=true'
+      - name: Guard against unapproved source changes
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=451b5ea38a79bca6d79acef9b5922eda414ecac6
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/064-files.txt"
+          if grep -Ev '^(scripts/nexus/|src/lib/nexus-demo-policy.ts$|src/proxy.ts$|src/app/dashboard/layout.tsx$|src/app/auth/login/page.tsx$|\.dockerignore$|\.github/workflows/nexus-064-local-demo.yml$)' "$RUNNER_TEMP/064-files.txt"; then
+            echo 'Unexpected modification outside demo-review paths';exit 1
+          fi
+          test -z "$(git status --porcelain --untracked-files=no)" || { git status --short;exit 1; }
+          echo 'NEXUS064_MAIN_UNCHANGED_AND_SCOPED_ONLY=true'
+      - name: Evidence artifacts without any credentials
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nexus-064-local-persistent-demo-evidence
+          path: |
+            ${{ runner.temp }}/064-login.png
+            ${{ runner.temp }}/064-login.html
+            ${{ runner.temp }}/064-restarted.html
+            ${{ runner.temp }}/064-chrome.log
+          retention-days: 3
+      - name: Shut down disposable CI containers without touching any real machines
+        if: always()
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/064-ci.env"; then
+            docker compose --env-file "$RUNNER_TEMP/064-ci.env" -f scripts/nexus/compose.demo-064.yml down -v || true
+          fi

@@ -42,6 +42,12 @@ export default async function DashboardLayout({
                     <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative z-10" suppressHydrationWarning={true}>
                         <Navbar appName={appName} />
                         <main className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6 styled-scrollbar">
+                            {process.env.NEXUS_DEMO_ONLY === "true" && (
+                                <div role="status" className="mb-4 rounded-xl border border-amber-400/40 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                                    NEXUS — demonstração local. Banco fictício e persistente.
+                                    Apenas edição de rascunhos. Publicação, WhatsApp, campanhas e integrações estão bloqueados.
+                                </div>
+                            )}
                             {children}
                         </main>
                     </div>
