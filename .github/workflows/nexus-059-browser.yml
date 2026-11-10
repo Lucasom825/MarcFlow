@@ -46,6 +46,10 @@ jobs:
           timeout 35 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=8000 --window-size=1440,900 --screenshot="$RUNNER_TEMP/nexus-059-screenshot.png" 'http://127.0.0.1:48959/?example=1' > /dev/null 2>> "$RUNNER_TEMP/chrome-stderr.log"
           test -s "$RUNNER_TEMP/nexus-059-screenshot.png"
           echo "NEXUS_BROWSER_UI_E2E_PASS=true"
+      - name: Install pinned project dependencies with package scripts disabled
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Render actual MarcFlow diagnostic UI component from converted graph
+        run: npx --no-install tsx scripts/nexus/test-issues-integration.tsx
       - name: Guard against changes outside pilot and browser test code
         shell: bash
         run: |
