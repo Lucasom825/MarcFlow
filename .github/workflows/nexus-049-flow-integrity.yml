@@ -24,6 +24,8 @@ jobs:
         run: npx --no-install tsx scripts/test-flow-logic.ts
       - name: New graph and legacy compatibility regressions
         run: npx --no-install tsx scripts/test-flow-integrity.ts
+      - name: Verify actual editor issue display via React SSR
+        run: npx --no-install tsx scripts/test-flow-issues-ui.ts
       - name: Generate local Prisma types without connecting to a database
         run: npx --no-install prisma generate
       - name: Compile TypeScript app and editor contracts
