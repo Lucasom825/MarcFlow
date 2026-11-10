@@ -1,0 +1,65 @@
+# NEXUS 064 — local-only persistent demo. Start with scripts/nexus/start-demo-064.ps1
+# Uses separate named volumes and a synthetic DB; does NOT load WhatsApp workers.
+name: nexus064-demo
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Generated local demo secret required}
+      MYSQL_DATABASE: nexus_demo
+      MYSQL_USER: nexus_demo
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Generated local demo DB password required}
+    volumes:
+      - demo_mysql_data:/var/lib/mysql
+    networks:
+      - demo_network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 25
+    restart: unless-stopped
+  app:
+    build:
+      context: ../..
+      dockerfile: scripts/nexus/Dockerfile.demo-064
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql://nexus_demo:${MYSQL_PASSWORD:?}@db:3306/nexus_demo
+      AUTH_SECRET: ${AUTH_SECRET:?Generated local demo Auth.js secret required}
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: http://localhost:39164
+      NEXTAUTH_URL: http://localhost:39164
+      NEXT_PUBLIC_APP_URL: http://localhost:39164
+      NEXT_PUBLIC_ALLOW_INDEXING: "false"
+      NEXUS_DEMO_ONLY: "true"
+      NEXUS_DEMO_EMAIL: demo@nexus.invalid
+      NEXUS_DEMO_PASSWORD: ${NEXUS_DEMO_PASSWORD:?Generated local demo password required}
+      NEXT_TELEMETRY_DISABLED: "1"
+      UPDATE_REPO: ""
+      NODE_ENV: development
+      TZ: America/Sao_Paulo
+    command:
+      - sh
+      - -ec
+      - |
+        npx --no-install prisma db push --skip-generate
+        npx --no-install tsx scripts/nexus/demo-seed-064.ts
+        exec npx --no-install next dev --webpack -H 0.0.0.0 -p 39164
+    ports:
+      - "127.0.0.1:39164:39164"
+    networks:
+      - demo_network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:39164/auth/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      start_period: 90s
+      retries: 12
+    restart: unless-stopped
+networks:
+  demo_network: {}
+volumes:
+  demo_mysql_data: {}
