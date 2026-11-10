@@ -1,9 +1,20 @@
 import { auth } from "@/lib/auth";
+import { allowNexusDemoApi } from "@/lib/nexus-demo-policy";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
+
+    // Explicit private demo mode: block any unrelated API route before Auth.js
+    // and the normal API-key/session authorization paths. No default changes.
+    if (process.env.NEXUS_DEMO_ONLY === "true" && pathname.startsWith("/api/") &&
+        !allowNexusDemoApi(pathname, request.method)) {
+        return NextResponse.json(
+            { status: false, message: "Ação desativada na demonstração local do NEXUS." },
+            { status: 403 }
+        );
+    }
 
     // Public routes that don't require authentication
     const publicRoutes = ["/auth/login", "/auth/register", "/api/auth", "/api/test", "/terms", "/privacy"];
