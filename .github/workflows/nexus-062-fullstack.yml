@@ -1,0 +1,155 @@
+name: NEXUS 062 - Original editor real HTTP authenticated MySQL browser proof
+on:
+  push:
+    branches:
+      - nexus/fullstack-http-mysql-062-20261110
+permissions:
+  contents: read
+jobs:
+  fullstack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: nexus062_disposable_root
+          MYSQL_DATABASE: nexus062
+          MYSQL_USER: nexus062
+          MYSQL_PASSWORD: nexus062_disposable_only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -pnexus062_disposable_root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=18
+    env:
+      DATABASE_URL: mysql://nexus062:nexus062_disposable_only@127.0.0.1:3306/nexus062
+      AUTH_SECRET: NEXUS062_ONLY_FOR_DISPOSABLE_CI_NOT_A_USER_SECRET_20261110
+      NEXUS062_EPHEMERAL_ONLY: 'true'
+      NEXT_PUBLIC_NEXUS062_LAB: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      NODE_ENV: development
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node.js 22 locked environment
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Verify isolated database target
+        run: |
+          set -euo pipefail
+          [[ "$DATABASE_URL" == 'mysql://nexus062:nexus062_disposable_only@127.0.0.1:3306/nexus062' ]]
+          [[ "$NEXUS062_EPHEMERAL_ONLY" == true ]]
+          echo 'NEXUS062_EPHEMERAL_MYSQL_ONLY=true'
+      - name: Install locked packages without postinstall
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma and initialize temporary MySQL
+        run: |
+          npx --no-install prisma generate
+          npx --no-install prisma db push --skip-generate
+      - name: Seed two disconnected dummy tenants with a Drawflow-derived graph
+        run: npx --no-install tsx scripts/nexus/seed-http-062.ts
+      - name: Existing converter tests
+        run: node --test scripts/nexus/test-drawflow-converter.mjs
+      - name: Existing validator tests
+        run: node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Create Next.js test route and narrow one-page access bypass ONLY in disposable runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp src/app/layout.tsx "$RUNNER_TEMP/062-original-layout.tsx"
+          cp src/proxy.ts "$RUNNER_TEMP/062-original-proxy.ts"
+          cp src/app/icon.tsx "$RUNNER_TEMP/062-original-icon.tsx"
+          rm src/app/icon.tsx
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/proxy.ts')
+          s=p.read_text()
+          needle='    const { pathname } = request.nextUrl;'
+          assert s.count(needle)==1
+          s=s.replace(needle,needle+'\n    if (pathname === "/nexus-062-sandbox") return NextResponse.next(); // CI-only disposable route',1)
+          p.write_text(s)
+          PY
+          cat > src/app/layout.tsx <<'NEXTLAB'
+          import type { ReactNode } from "react";
+          import "./globals.css";
+          export default function Root({children}:{children:ReactNode}) {
+            return <html lang="pt-BR"><body style={{margin:0}}>{children}</body></html>;
+          }
+          NEXTLAB
+          mkdir -p src/app/nexus-062-sandbox
+          cat > src/app/nexus-062-sandbox/page.tsx <<'NEXTLAB'
+          import FullStackNexus062 from "../../../scripts/nexus/fullstack-client-062";
+          export default function Page() { return <FullStackNexus062 />; }
+          NEXTLAB
+          echo "NEXUS062_CI_ONLY_PAGE_READY=true"
+      - name: Boot Next 16 with real proxy and API on loopback
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install next dev --webpack -p 39162 -H 127.0.0.1 > "$RUNNER_TEMP/062-next.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/062-next.pid"
+          for i in $(seq 1 110); do
+            if curl -fsS --max-time 4 http://127.0.0.1:39162/nexus-062-sandbox -o "$RUNNER_TEMP/062-initial.html"; then break; fi
+            sleep 1
+          done
+          test -s "$RUNNER_TEMP/062-initial.html" || { tail -100 "$RUNNER_TEMP/062-next.log"; exit 1; }
+          echo "NEXUS062_REAL_NEXT_READY=true"
+      - name: Verify HTTP authorization and initial persistent state
+        run: npx --no-install tsx scripts/nexus/http-contract-062.ts before
+      - name: Chrome E2E - real editor save over network into MySQL and reload
+        shell: bash
+        run: |
+          set -euo pipefail
+          BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$BROWSER" || { echo 'Chrome missing'; exit 1; }
+          timeout 105 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=42000 --window-size=1440,900 --dump-dom 'http://127.0.0.1:39162/nexus-062-sandbox?e2e=1' > "$RUNNER_TEMP/062-dom.html" 2> "$RUNNER_TEMP/062-chrome.log"
+          if ! grep -Fq 'data-nexus062="pass"' "$RUNNER_TEMP/062-dom.html"; then
+            grep -o 'data-nexus062-[^ >]*' "$RUNNER_TEMP/062-dom.html" | head -15 || true
+            tail -100 "$RUNNER_TEMP/062-next.log"
+            echo 'Browser E2E failed'; exit 1
+          fi
+          grep -Fq 'data-nexus062-nodes="3"' "$RUNNER_TEMP/062-dom.html"
+          grep -Fq 'data-nexus062-edges="1"' "$RUNNER_TEMP/062-dom.html"
+          grep -Fq 'data-nexus062-realhttp="yes"' "$RUNNER_TEMP/062-dom.html"
+          grep -Fq 'data-nexus062-published="false"' "$RUNNER_TEMP/062-dom.html"
+          timeout 40 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=12000 --window-size=1440,900 --screenshot="$RUNNER_TEMP/062-real-browser.png" 'http://127.0.0.1:39162/nexus-062-sandbox' > /dev/null 2>> "$RUNNER_TEMP/062-chrome.log"
+          test -s "$RUNNER_TEMP/062-real-browser.png"
+          echo 'NEXUS062_ORIGINAL_EDITOR_MYSQL_HTTP_RELOAD_PASS=true'
+      - name: Verify stored draft through HTTP, reject stale save and restore safely
+        run: npx --no-install tsx scripts/nexus/http-contract-062.ts after
+      - name: Undo CI-only page and guard production version
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/062-original-layout.tsx" src/app/layout.tsx 2>/dev/null || true
+          cp "$RUNNER_TEMP/062-original-proxy.ts" src/proxy.ts 2>/dev/null || true
+          cp "$RUNNER_TEMP/062-original-icon.tsx" src/app/icon.tsx 2>/dev/null || true
+          rm -rf src/app/nexus-062-sandbox
+          BASE=20ce405d7310c4d51acb4bba7dd60d9ab3afc016
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/062-changes.txt"
+          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-062-fullstack.yml$)' "$RUNNER_TEMP/062-changes.txt"; then
+            echo 'Out-of-scope tracked file changed in branch';exit 1
+          fi
+          test -z "$(git status --porcelain --untracked-files=no)" || { git status --short;exit 1; }
+          echo 'NEXUS062_MAIN_AND_APP_TRACKED_SOURCES_UNCHANGED=true'
+      - name: Upload no-secrets disposable browser and log evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nexus-062-fullstack-evidence
+          path: |
+            ${{ runner.temp }}/062-dom.html
+            ${{ runner.temp }}/062-real-browser.png
+            ${{ runner.temp }}/062-next.log
+            ${{ runner.temp }}/062-chrome.log
+          retention-days: 3
