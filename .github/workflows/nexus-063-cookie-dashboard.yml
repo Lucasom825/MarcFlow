@@ -70,6 +70,7 @@ jobs:
           set -euo pipefail
           cp src/app/layout.tsx "$RUNNER_TEMP/063-root-layout.tsx"
           cp src/app/dashboard/layout.tsx "$RUNNER_TEMP/063-dashboard-layout.tsx"
+          cp src/proxy.ts "$RUNNER_TEMP/063-original-proxy.ts"
           cp src/app/icon.tsx "$RUNNER_TEMP/063-icon.tsx"
           rm src/app/icon.tsx
           cp scripts/nexus/browser-driver-063.js public/nexus063-e2e.js
@@ -80,6 +81,12 @@ jobs:
           assert s.count('<UpdateChecker />')==1
           # Side effect to check application updates is irrelevant to cookie/flow proof.
           p.write_text(s.replace('<UpdateChecker />','{/* CI-only: background update checker excluded */}'))
+          proxy=Path('src/proxy.ts')
+          psrc=proxy.read_text()
+          start='    const { pathname } = request.nextUrl;'
+          assert psrc.count(start)==1
+          psrc=psrc.replace(start,start+'\\n    if (pathname === "/nexus063-e2e.js") return NextResponse.next(); // CI-only static browser driver',1)
+          proxy.write_text(psrc)
           PY
           cat > src/app/layout.tsx <<'TEMP63'
           import type { ReactNode } from "react";
@@ -157,6 +164,7 @@ jobs:
           set -euo pipefail
           cp "$RUNNER_TEMP/063-root-layout.tsx" src/app/layout.tsx 2>/dev/null || true
           cp "$RUNNER_TEMP/063-dashboard-layout.tsx" src/app/dashboard/layout.tsx 2>/dev/null || true
+          cp "$RUNNER_TEMP/063-original-proxy.ts" src/proxy.ts 2>/dev/null || true
           cp "$RUNNER_TEMP/063-icon.tsx" src/app/icon.tsx 2>/dev/null || true
           rm -f public/nexus063-e2e.js
           BASE=b3b8854ef572a58d10400854f2589803d4ff3e55
