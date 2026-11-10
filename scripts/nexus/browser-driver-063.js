@@ -48,11 +48,34 @@
       const submit=document.querySelector('button[type="submit"]');
       return email&&password&&submit?{email,password,submit}:null;
     },"real login form");
-    setInput(fields.email,mode==="owner"?OWNER:"other063@example.invalid");
-    setInput(fields.password,mode==="owner"?"nexus063-owner-disposable-password":"nexus063-other-disposable-password");
-    await wait(160);
-    if(fields.submit.disabled) throw Error("Original login form disabled unexpectedly");
-    fields.submit.click();
+    const emailValue=mode==="owner"?OWNER:"other063@example.invalid";
+    const passwordValue=mode==="owner"?"nexus063-owner-disposable-password":"nexus063-other-disposable-password";
+    // Give the real Next.js client time to hydrate and attach React Hook Form handlers.
+    await wait(1700);
+    for(let attempt=0;attempt<3;attempt++){
+      fields.email.focus();
+      setInput(fields.email,emailValue);
+      await wait(100);
+      fields.password.focus();
+      setInput(fields.password,passwordValue);
+      fields.password.blur();
+      await wait(200);
+      if(fields.email.value!==emailValue||fields.password.value!==passwordValue)
+        throw Error("Hydrated login controls rejected synthetic typing");
+      if(fields.submit.disabled) throw Error("Original login submit disabled");
+      fields.submit.click();
+      await wait(950);
+      if(location.pathname!=="/auth/login")return;
+      // React Hook Form may have reset fields if a synthetic event raced hydration.
+      const validation=document.querySelector('[data-slot="form-message"]')?.textContent||"";
+      if(!validation)break;
+    }
+    if(location.pathname==="/auth/login" &&
+       (document.body.textContent||"").includes("E-mail ou senha inválidos"))
+      throw Error("Real NextAuth rejected synthetic credentials");
+    if(location.pathname==="/auth/login" &&
+       document.querySelector('[data-slot="form-message"]'))
+      throw Error("Original login form validation did not accept synthetic input");
   }
 
   async function ownerDashboard() {
