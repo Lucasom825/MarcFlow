@@ -28,18 +28,22 @@ jobs:
       - name: Existing MarcFlow contracts
         run: node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
       - name: Install locked dependencies without package scripts
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx --no-install prisma generate
       - name: Generate throwaway Next route only inside ephemeral CI runner
         shell: bash
         run: |
           set -euo pipefail
           cp src/app/layout.tsx "$RUNNER_TEMP/060-layout-original.tsx"
           cp middleware.ts "$RUNNER_TEMP/060-middleware-original.ts"
+          cp src/proxy.ts "$RUNNER_TEMP/060-proxy-original.ts"
           # A minimalist test-only shell removes all production auth and DB integrations.
           # It exists ONLY in this disposable runner, never in the committed branch.
-          rm middleware.ts
+          rm middleware.ts src/proxy.ts
           cat > src/app/layout.tsx <<'NEXTLAB'
           import type { ReactNode } from "react";
+          import "./globals.css";
           export default function Root({ children }: { children: ReactNode }) {
             return <html lang="pt-BR"><body style={{margin:0}}>{children}</body></html>;
           }
@@ -56,7 +60,7 @@ jobs:
           set -euo pipefail
           npx --no-install next dev --webpack -p 39160 -H 127.0.0.1 > "$RUNNER_TEMP/060-next.log" 2>&1 &
           echo "$!" > "$RUNNER_TEMP/060-next.pid"
-          for i in $(seq 1 150); do
+          for i in $(seq 1 75); do
             if curl --max-time 2 -fsS 'http://127.0.0.1:39160/nexus-060-sandbox' -o "$RUNNER_TEMP/060-initial.html"; then break; fi
             sleep 1
           done
@@ -87,6 +91,7 @@ jobs:
           set -euo pipefail
           cp "$RUNNER_TEMP/060-layout-original.tsx" src/app/layout.tsx 2>/dev/null || true
           cp "$RUNNER_TEMP/060-middleware-original.ts" middleware.ts 2>/dev/null || true
+          cp "$RUNNER_TEMP/060-proxy-original.ts" src/proxy.ts 2>/dev/null || true
           rm -rf src/app/nexus-060-sandbox
           BASE=117f5b2d256fdfbf03c150590dca40a740bd3ae1
           git diff --check "$BASE" HEAD
