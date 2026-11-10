@@ -13,7 +13,7 @@ async function main() {
   assert.equal(url.hostname,"db");
   assert.equal(url.pathname,"/nexus_demo");
   const step=process.argv[2];
-  assert.ok(["before","mutate","after"].includes(step));
+  assert.ok(["before","after"].includes(step));
   try {
     assert.equal(await prisma.user.count(),1);
     assert.equal(await prisma.session.count(),1);
@@ -30,24 +30,17 @@ async function main() {
     assert.equal(flow.status,"DRAFT");
     assert.equal(flow.publishedGraph,null);
     const graph=flow.draftGraph;
-    assert.equal(graph.nodes.length,2);
+    assert.equal(graph.nodes.length,step==="before"?2:3);
     assert.equal(graph.edges.length,1);
     if(step==="before")assert.equal(flow.draftRevision,0);
-    if(step==="mutate"){
-      assert.equal(flow.draftRevision,0);
-      const changed=structuredClone(graph);
-      changed.nodes[0].position.x+=9;
-      const result=await prisma.flow.updateMany({
-        where:{id:FLOW,draftRevision:0,status:"DRAFT"},
-        data:{draftGraph:changed,draftRevision:{increment:1}},
-      });
-      assert.equal(result.count,1);
-    }
     if(step==="after"){
       assert.equal(flow.draftRevision,1);
-      assert.ok(Number.isFinite(graph.nodes[0].position.x));
+      assert.equal(graph.nodes.length,3);
+      assert.equal(graph.edges.length,1);
+      assert.ok(graph.nodes.some(n=>n.id==="nexus064-demo-cookie-added"),
+        "HTTP-added node must survive full Docker down/up");
       assert.equal(await prisma.flow.count(),1);
-      // The mutated data is the only draft and is not reset by idempotent seed.
+      // Idempotent seed must not reset browser/API edits.
       assert.equal((await prisma.flow.findUniqueOrThrow({where:{id:FLOW}})).draftRevision,1);
     }
     console.log("NEXUS064_PERSISTENCE_"+step.toUpperCase()+"_PASS=true");
