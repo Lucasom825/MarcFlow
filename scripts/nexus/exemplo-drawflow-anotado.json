@@ -1,0 +1,76 @@
+{
+  "drawflow": {
+    "Home": {
+      "data": {
+        "1": {
+          "id": 1,
+          "name": "inicio",
+          "data": {
+            "nexus_marcflow": {
+              "schema": "nexus.marcflow.v1",
+              "type": "start",
+              "payload": {},
+              "outputHandles": {
+                "output_1": "next"
+              }
+            }
+          },
+          "html": "<h1>source html ignored</h1>",
+          "pos_x": 0,
+          "pos_y": 0,
+          "inputs": {},
+          "outputs": {
+            "output_1": {
+              "connections": [
+                {
+                  "node": "2",
+                  "output": "input_1"
+                }
+              ]
+            }
+          }
+        },
+        "2": {
+          "id": 2,
+          "name": "mensagem",
+          "data": {
+            "nexus_marcflow": {
+              "schema": "nexus.marcflow.v1",
+              "type": "content",
+              "payload": {
+                "items": [
+                  {
+                    "id": "t1",
+                    "kind": "text",
+                    "text": "Olá! Sou uma mensagem de teste do NEXUS."
+                  }
+                ]
+              },
+              "outputHandles": {
+                "output_1": "next"
+              }
+            }
+          },
+          "html": "<b>visually arbitrary</b>",
+          "pos_x": 320,
+          "pos_y": 120,
+          "inputs": {
+            "input_1": {
+              "connections": [
+                {
+                  "node": "1",
+                  "input": "output_1"
+                }
+              ]
+            }
+          },
+          "outputs": {
+            "output_1": {
+              "connections": []
+            }
+          }
+        }
+      }
+    }
+  }
+}
