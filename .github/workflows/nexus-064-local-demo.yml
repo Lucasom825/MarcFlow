@@ -84,14 +84,14 @@ jobs:
           test "$(status -X POST "$root/api/sessions")" = '403'
           test "$(status -X POST "$root/api/messages/send")" = '403'
           echo 'NEXUS064_REAL_NEXT_DEMO_FIREWALL_PASS=true'
-      - name: Prove demo database created, config locked and safe graph
+      - name: Prove real Auth.js cookie draft API before restart
         shell: bash
         run: |
           set -euo pipefail
           args=(compose --env-file "$RUNNER_TEMP/064-ci.env" -f scripts/nexus/compose.demo-064.yml)
           docker "${args[@]}" exec -T app npx --no-install tsx scripts/nexus/demo-persistence-proof-064.ts before
-          docker "${args[@]}" exec -T app npx --no-install tsx scripts/nexus/demo-persistence-proof-064.ts mutate
-          echo "NEXUS064_MYSQL_DRAFT_WRITTEN_BEFORE_RESTART=true"
+          docker "${args[@]}" exec -T app node scripts/nexus/demo-cookie-http-proof-064.mjs
+          echo "NEXUS064_MYSQL_COOKIE_DRAFT_WRITTEN_BEFORE_RESTART=true"
       - name: Stop and restart containers WITHOUT deleting named MySQL volume
         shell: bash
         run: |
