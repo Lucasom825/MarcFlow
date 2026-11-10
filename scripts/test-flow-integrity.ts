@@ -67,4 +67,55 @@ const twoOutputs: FlowGraph = {
     ],
 };
 assert.deepEqual(check(twoOutputs), [], "Saídas diferentes de condição continuam válidas");
-console.log("flow integrity: 8 regression scenarios passed (read-only, no WhatsApp).");
+// Compatibility: formerly valid graph snapshots, including cycles intentionally
+// used by the engine's runaway-loop safety test, must remain valid when their
+// source outputs are unique and correctly named.
+const intentionalLoop: FlowGraph = {
+    nodes: [start, action],
+    edges: [
+        { id: "loop-in", source: "start", sourceHandle: "next", target: "action" },
+        { id: "loop-edge", source: "action", sourceHandle: "next", target: "action" },
+    ],
+};
+assert.deepEqual(check(intentionalLoop), [], "Legacy self-loop structurally valid; runtime keeps its own cycle guard");
+
+// The same source handle can be used independently on distinct source nodes.
+assert.deepEqual(check(twoOutputs), [], "The two condition handles remain independent");
+
+// Optional exits (timeout/error) do not require a connection.
+const menu: FlowNode = {
+    id: "menu", type: "menu", position: point,
+    data: { question: "Escolha", invalidText: "Inválido", maxErrors: 3,
+        options: [{ id: "a", text: "Preço" }], expireValue: 1, expireUnit: "days" },
+};
+const legacyMenu: FlowGraph = {
+    nodes: [start, menu, content],
+    edges: [
+        { id: "start-menu", source: "start", sourceHandle: "next", target: "menu" },
+        { id: "menu-option", source: "menu", sourceHandle: "option:a", target: "content" },
+    ],
+};
+assert.deepEqual(check(legacyMenu), [], "Valid menu without timeout and error exits stays publishable");
+
+// A stale menu option must fail instead of silently routing nowhere.
+assert.ok(has({
+    ...legacyMenu,
+    nodes: [start, { ...menu, data: { ...menu.data, options: [{ id: "b", text: "Novo" }] } }, content],
+}, /saída inexistente ou desatualizada/), "Reconfigured menus cannot keep an old option handle");
+
+// A named source node may have a valid single output even when it is isolated,
+// and reachability must remain a warning rather than an error.
+const unconnectedAction = { ...action, id: "standalone" };
+assert.deepEqual(check({ ...healthy, nodes: [...healthy.nodes, unconnectedAction] }), [], "Orphan nodes remain warnings");
+
+// The API publisher and editor must keep using the SAME validator contract.
+// This check is source-level (not browser automation) and does not touch DB.
+import { readFileSync } from "node:fs";
+const publishApi = readFileSync("src/app/api/flows/[sessionId]/[flowId]/publish/route.ts", "utf8");
+const editorSource = readFileSync("src/components/flows/flow-editor.tsx", "utf8");
+assert.match(publishApi, /validateGraph\(graph\)/);
+assert.match(editorSource, /validateGraph\(graph\)/);
+assert.match(editorSource, /sourceHandle: e\.sourceHandle \|\| "next"/);
+
+console.log("flow integrity: 13 graph/legacy cases + editor/API validation contract passed.");
+
