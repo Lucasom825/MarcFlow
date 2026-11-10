@@ -267,8 +267,48 @@ export function validateGraph(graph: FlowGraph): GraphIssue[] {
         }
     }
 
+    // A flow's output is deterministic only when its source handle exists and
+    // points to one destination. The editor enforces this for new connections,
+    // but imported/stale graphs may bypass the UI. Check before publishing.
+    if (ids.size !== graph.nodes.length) {
+        issues.push({ level: "error", message: "Há blocos com identificadores duplicados no fluxo." });
+    }
+    const nodeById = new Map(graph.nodes.map(node => [node.id, node]));
+    const edgeIds = new Set<string>();
+    const usedOutputs = new Set<string>();
     for (const e of graph.edges) {
-        if (!ids.has(e.source) || !ids.has(e.target)) issues.push({ level: "error", message: "Há uma conexão apontando para um bloco que não existe." });
+        if (edgeIds.has(e.id)) {
+            issues.push({ level: "error", message: "Há conexões com identificadores duplicados." });
+        }
+        edgeIds.add(e.id);
+        const source = nodeById.get(e.source);
+        const target = nodeById.get(e.target);
+        if (!source || !target) {
+            issues.push({ level: "error", message: "Há uma conexão apontando para um bloco que não existe." });
+            continue;
+        }
+        if (target.type === "start") {
+            issues.push({ nodeId: target.id, level: "error", message: "O bloco inicial não pode receber conexões." });
+        }
+        const handle = typeof e.sourceHandle === "string" ? e.sourceHandle : "";
+        if (!outputsOf(source).some(output => output.id === handle)) {
+            issues.push({
+                nodeId: source.id,
+                level: "error",
+                message: `${source.data.name || BLOCKS[source.type].label}: conexão usa uma saída inexistente ou desatualizada.`,
+            });
+        }
+        // Length-prefixed tuple prevents collisions with user-defined ids that
+        // may contain separators such as ':', '|', or '/'.
+        const outputKey = `${e.source.length}:${e.source}${handle.length}:${handle}`;
+        if (usedOutputs.has(outputKey)) {
+            issues.push({
+                nodeId: source.id,
+                level: "error",
+                message: `${source.data.name || BLOCKS[source.type].label}: a mesma saída está conectada a mais de um destino.`,
+            });
+        }
+        usedOutputs.add(outputKey);
     }
 
     // Reachability warning
