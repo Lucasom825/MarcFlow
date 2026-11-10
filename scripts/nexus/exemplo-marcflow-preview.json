@@ -1,0 +1,62 @@
+{
+  "ok": true,
+  "graph": {
+    "nodes": [
+      {
+        "id": "df_1",
+        "type": "start",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "data": {}
+      },
+      {
+        "id": "df_2",
+        "type": "content",
+        "position": {
+          "x": 320,
+          "y": 120
+        },
+        "data": {
+          "items": [
+            {
+              "id": "t1",
+              "kind": "text",
+              "text": "Olá! Sou uma mensagem de teste do NEXUS."
+            }
+          ]
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "df_edge_1",
+        "source": "df_1",
+        "sourceHandle": "next",
+        "target": "df_2"
+      }
+    ]
+  },
+  "issues": [],
+  "warnings": [
+    {
+      "code": "HTML_IGNORED",
+      "path": "$.drawflow.Home.data[\"1\"].html",
+      "message": "HTML arbitrário foi descartado, sem execução nem renderização."
+    },
+    {
+      "code": "HTML_IGNORED",
+      "path": "$.drawflow.Home.data[\"2\"].html",
+      "message": "HTML arbitrário foi descartado, sem execução nem renderização."
+    }
+  ],
+  "provenance": {
+    "adapter": "NEXUS 057",
+    "reference": "jerosoler/Drawflow@ef8a88cdfbf2010cc0b641b94278be6db413938b",
+    "inputAuthenticityVerified": false,
+    "target": "MarcFlow draft FlowGraph only",
+    "executedTargetCode": false,
+    "modifiedProduction": false
+  }
+}
