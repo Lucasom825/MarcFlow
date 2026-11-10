@@ -1,0 +1,119 @@
+name: NEXUS 060 - Real MarcFlow editor in disposable browser sandbox
+on:
+  push:
+    branches:
+      - nexus/real-editor-sandbox-060-20261110
+permissions:
+  contents: read
+jobs:
+  real-editor-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NODE_ENV: development
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Pin Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Existing Drawflow converter regressions
+        run: node --test scripts/nexus/test-drawflow-converter.mjs
+      - name: Existing MarcFlow contracts
+        run: node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Install locked dependencies without package scripts
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx --no-install prisma generate
+      - name: Generate throwaway Next route only inside ephemeral CI runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp src/app/layout.tsx "$RUNNER_TEMP/060-layout-original.tsx"
+          cp middleware.ts "$RUNNER_TEMP/060-middleware-original.ts"
+          cp src/proxy.ts "$RUNNER_TEMP/060-proxy-original.ts"
+          cp src/app/icon.tsx "$RUNNER_TEMP/060-icon-original.tsx"
+          # A minimalist test-only shell removes all production auth and DB integrations.
+          # It exists ONLY in this disposable runner, never in the committed branch.
+          rm middleware.ts src/proxy.ts src/app/icon.tsx
+          cat > src/app/layout.tsx <<'NEXTLAB'
+          import type { ReactNode } from "react";
+          import "./globals.css";
+          export default function Root({ children }: { children: ReactNode }) {
+            return <html lang="pt-BR"><body style={{margin:0}}>{children}</body></html>;
+          }
+          NEXTLAB
+          mkdir -p src/app/nexus-060-sandbox
+          cat > src/app/nexus-060-sandbox/page.tsx <<'NEXTLAB'
+          import RealEditorSandbox from "../../../scripts/nexus/real-editor-sandbox";
+          export default function Page() { return <RealEditorSandbox />; }
+          NEXTLAB
+          echo 'NEXUS_TEMP_ONLY_ROUTE=true'
+      - name: Start Next dev server on loopback only
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install next dev --webpack -p 39160 -H 127.0.0.1 > "$RUNNER_TEMP/060-next.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/060-next.pid"
+          for i in $(seq 1 75); do
+            if curl --max-time 2 -fsS 'http://127.0.0.1:39160/nexus-060-sandbox' -o "$RUNNER_TEMP/060-initial.html"; then break; fi
+            sleep 1
+          done
+          test -s "$RUNNER_TEMP/060-initial.html" || { tail -100 "$RUNNER_TEMP/060-next.log"; exit 1; }
+          echo 'NEXUS_060_NEXT_DEV_READY=true'
+      - name: Drive actual React Flow editor in Chrome and test draft save/reload
+        shell: bash
+        run: |
+          set -euo pipefail
+          BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$BROWSER"
+          timeout 110 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=28000 --window-size=1440,900 --dump-dom 'http://127.0.0.1:39160/nexus-060-sandbox?e2e=1' > "$RUNNER_TEMP/060-editor-dom.html" 2> "$RUNNER_TEMP/060-chrome.log"
+          if ! grep -Fq 'data-nexus060="pass"' "$RUNNER_TEMP/060-editor-dom.html"; then
+            echo "Real editor test did not pass."
+            grep -o 'data-nexus060-[^ >]*' "$RUNNER_TEMP/060-editor-dom.html" | head -12 || true
+            tail -80 "$RUNNER_TEMP/060-next.log"
+            exit 1
+          fi
+          grep -Fq 'data-nexus060-nodes="3"' "$RUNNER_TEMP/060-editor-dom.html"
+          grep -Fq 'data-nexus060-edges="1"' "$RUNNER_TEMP/060-editor-dom.html"
+          timeout 35 "$BROWSER" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=18000 --window-size=1440,900 --screenshot="$RUNNER_TEMP/060-editor.png" 'http://127.0.0.1:39160/nexus-060-sandbox?e2e=1' > /dev/null 2>> "$RUNNER_TEMP/060-chrome.log"
+          test -s "$RUNNER_TEMP/060-editor.png"
+          if grep -Fq "prisma:error" "$RUNNER_TEMP/060-next.log"; then
+            echo 'Unexpected database client initialization in sandbox'; exit 1
+          fi
+          echo 'NEXUS_060_REAL_EDITOR_E2E_PASS=true'
+      - name: Restore throwaway modifications and guard source scope
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/060-layout-original.tsx" src/app/layout.tsx 2>/dev/null || true
+          cp "$RUNNER_TEMP/060-middleware-original.ts" middleware.ts 2>/dev/null || true
+          cp "$RUNNER_TEMP/060-proxy-original.ts" src/proxy.ts 2>/dev/null || true
+          cp "$RUNNER_TEMP/060-icon-original.tsx" src/app/icon.tsx 2>/dev/null || true
+          rm -rf src/app/nexus-060-sandbox
+          BASE=117f5b2d256fdfbf03c150590dca40a740bd3ae1
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/060-changed.txt"
+          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-060-real-editor.yml$)' "$RUNNER_TEMP/060-changed.txt"; then
+            echo 'Forbidden tracked file change detected'; exit 1
+          fi
+          test -z "$(git status --porcelain --untracked-files=no)" || { git status --short; exit 1; }
+          echo 'NEXUS_060_MAIN_AND_PRODUCTION_UNCHANGED=true'
+      - name: Retain inspectable evidence for three days
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nexus-060-real-editor-evidence
+          path: |
+            ${{ runner.temp }}/060-editor-dom.html
+            ${{ runner.temp }}/060-editor.png
+            ${{ runner.temp }}/060-chrome.log
+            ${{ runner.temp }}/060-next.log
+          retention-days: 3
