@@ -64,42 +64,35 @@ jobs:
         run: |
           node --test scripts/nexus/test-drawflow-converter.mjs
           node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
-      - name: Inject ONLY CI browser driver and remove dashboard update background effect
+      - name: Build inline CI browser harness without touching authentication rules
         shell: bash
         run: |
           set -euo pipefail
           cp src/app/layout.tsx "$RUNNER_TEMP/063-root-layout.tsx"
           cp src/app/dashboard/layout.tsx "$RUNNER_TEMP/063-dashboard-layout.tsx"
-          cp src/proxy.ts "$RUNNER_TEMP/063-original-proxy.ts"
           cp src/app/icon.tsx "$RUNNER_TEMP/063-icon.tsx"
           rm src/app/icon.tsx
-          cp scripts/nexus/browser-driver-063.js public/nexus063-e2e.js
           python3 - <<'PY'
           from pathlib import Path
+          import json
           p=Path('src/app/dashboard/layout.tsx')
           s=p.read_text()
           assert s.count('<UpdateChecker />')==1
-          # Side effect to check application updates is irrelevant to cookie/flow proof.
           p.write_text(s.replace('<UpdateChecker />','{/* CI-only: background update checker excluded */}'))
-          proxy=Path('src/proxy.ts')
-          psrc=proxy.read_text()
-          start='    const { pathname } = request.nextUrl;'
-          assert psrc.count(start)==1
-          psrc=psrc.replace(start,start+'\\n    if (pathname === "/nexus063-e2e.js") return NextResponse.next(); // CI-only static browser driver',1)
-          proxy.write_text(psrc)
-          PY
-          cat > src/app/layout.tsx <<'TEMP63'
-          import type { ReactNode } from "react";
+          driver=Path('scripts/nexus/browser-driver-063.js').read_text()
+          layout='''import type { ReactNode } from "react";
           import { SessionProvider } from "next-auth/react";
           import "./globals.css";
           export default function Root({children}:{children:ReactNode}){
             return <html lang="pt-BR"><body style={{margin:0}}>
               <SessionProvider>{children}</SessionProvider>
-              <script defer src="/nexus063-e2e.js"></script>
+              <script dangerouslySetInnerHTML={{__html: DRIVER}} />
             </body></html>;
           }
-          TEMP63
-          echo 'NEXUS063_AUTH_AND_DASHBOARD_ORIGINAL_PAGES_PRESERVED=true'
+          '''
+          Path('src/app/layout.tsx').write_text(layout.replace('DRIVER',json.dumps(driver)))
+          PY
+          echo 'NEXUS063_PROXY_ORIGINAL_UNCHANGED=true'
       - name: Run original Next.js credential authentication and dashboard on localhost
         shell: bash
         run: |
@@ -164,9 +157,7 @@ jobs:
           set -euo pipefail
           cp "$RUNNER_TEMP/063-root-layout.tsx" src/app/layout.tsx 2>/dev/null || true
           cp "$RUNNER_TEMP/063-dashboard-layout.tsx" src/app/dashboard/layout.tsx 2>/dev/null || true
-          cp "$RUNNER_TEMP/063-original-proxy.ts" src/proxy.ts 2>/dev/null || true
           cp "$RUNNER_TEMP/063-icon.tsx" src/app/icon.tsx 2>/dev/null || true
-          rm -f public/nexus063-e2e.js
           BASE=b3b8854ef572a58d10400854f2589803d4ff3e55
           git diff --check "$BASE" HEAD
           git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/063-changed.txt"
