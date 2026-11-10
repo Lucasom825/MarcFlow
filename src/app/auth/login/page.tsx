@@ -19,6 +19,8 @@ import { Input } from "@/components/ui/input"
 import { Bot, ArrowRight, Loader2 } from "lucide-react";
 import Link from 'next/link';
 
+const NEXUS_DEMO = process.env.NEXT_PUBLIC_NEXUS_DEMO_ONLY === "true";
+
 const formSchema = z.object({
   email: z.string().email("Informe um e-mail válido"),
   password: z.string().min(1, "A senha é obrigatória"),
@@ -73,8 +75,8 @@ function LoginForm() {
           <div className="relative flex h-16 w-16 mb-4 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-primary text-white shadow-lg shadow-primary/30">
             <Bot className="h-8 w-8" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Bem-vindo de volta</h1>
-          <p className="text-muted-foreground mt-2">Entre na sua conta do MarcFlow</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{NEXUS_DEMO ? "NEXUS — demonstração local" : "Bem-vindo de volta"}</h1>
+          <p className="text-muted-foreground mt-2">{NEXUS_DEMO ? "Rascunhos fictícios, sem WhatsApp ou publicação" : "Entre na sua conta do MarcFlow"}</p>
         </div>
 
         <div className="glass-panel rounded-3xl p-8 shadow-2xl shadow-black/5 dark:shadow-black/40">
@@ -138,12 +140,16 @@ function LoginForm() {
           </Form>
         </div>
 
+        {NEXUS_DEMO ? (
+          <p className="mt-8 text-center text-sm text-muted-foreground">Use o e-mail de demonstração e a senha exibida no terminal local.</p>
+        ) : (
         <div className="mt-8 text-center text-sm text-muted-foreground">
           Não tem uma conta?{" "}
           <Link href="/auth/register" className="font-semibold text-primary hover:text-primary/80 transition-colors">
             Criar uma conta
           </Link>
         </div>
+        )}
       </div>
     </div>
   );
