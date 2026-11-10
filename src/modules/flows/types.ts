@@ -290,7 +290,8 @@ export function validateGraph(graph: FlowGraph): GraphIssue[] {
         if (target.type === "start") {
             issues.push({ nodeId: target.id, level: "error", message: "O bloco inicial não pode receber conexões." });
         }
-        if (!outputsOf(source).some(output => output.id === e.sourceHandle)) {
+        const handle = typeof e.sourceHandle === "string" ? e.sourceHandle : "";
+        if (!outputsOf(source).some(output => output.id === handle)) {
             issues.push({
                 nodeId: source.id,
                 level: "error",
@@ -299,7 +300,7 @@ export function validateGraph(graph: FlowGraph): GraphIssue[] {
         }
         // Length-prefixed tuple prevents collisions with user-defined ids that
         // may contain separators such as ':', '|', or '/'.
-        const outputKey = `${e.source.length}:${e.source}${e.sourceHandle.length}:${e.sourceHandle}`;
+        const outputKey = `${e.source.length}:${e.source}${handle.length}:${handle}`;
         if (usedOutputs.has(outputKey)) {
             issues.push({
                 nodeId: source.id,
