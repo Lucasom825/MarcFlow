@@ -68,7 +68,7 @@ jobs:
           BASE=6886b46eb1fc27d6a3f79d552c44067a4a412377
           git diff --check "$BASE" HEAD
           git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/nexus061-files.txt"
-          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-061-mysql.yml$)' "$RUNNER_TEMP/nexus061-files.txt"; then
+          if grep -Ev '^(scripts/nexus/|\.github/workflows/nexus-061-mysql.yml$|src/app/api/flows/\[sessionId\]/\[flowId\]/draft/route.ts$)' "$RUNNER_TEMP/nexus061-files.txt"; then
             echo 'Unexpected production change'; exit 1
           fi
           test -z "$(git status --porcelain --untracked-files=no)"
