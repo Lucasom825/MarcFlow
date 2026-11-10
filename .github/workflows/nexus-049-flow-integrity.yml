@@ -1,0 +1,27 @@
+name: Nexus 049 - MarcFlow flow integrity proof
+on:
+  push:
+    branches:
+      - nexus/rea-flow-integrity-049-20261109
+permissions:
+  contents: read
+jobs:
+  safe-flow-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node24
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5, Node24
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies with untrusted package scripts disabled
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Existing pure logic regressions
+        run: npx --no-install tsx scripts/test-flow-logic.ts
+      - name: New graph integrity regressions
+        run: npx --no-install tsx scripts/test-flow-integrity.ts
+      - name: Whitespace and patch checks
+        run: git diff --check HEAD~1 HEAD
