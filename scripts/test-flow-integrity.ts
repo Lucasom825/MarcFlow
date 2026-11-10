@@ -118,4 +118,3 @@ assert.match(editorSource, /validateGraph\(graph\)/);
 assert.match(editorSource, /sourceHandle: e\.sourceHandle \|\| "next"/);
 
 console.log("flow integrity: 13 graph/legacy cases + editor/API validation contract passed.");
-
