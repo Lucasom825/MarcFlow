@@ -35,6 +35,7 @@ services:
       NEXT_PUBLIC_APP_URL: http://localhost:39164
       NEXT_PUBLIC_ALLOW_INDEXING: "false"
       NEXUS_DEMO_ONLY: "true"
+      NEXT_PUBLIC_NEXUS_DEMO_ONLY: "true"
       NEXUS_DEMO_EMAIL: demo@nexus.invalid
       NEXUS_DEMO_PASSWORD: ${NEXUS_DEMO_PASSWORD:?Generated local demo password required}
       NEXT_TELEMETRY_DISABLED: "1"
