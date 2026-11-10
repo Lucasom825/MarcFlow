@@ -28,5 +28,9 @@ jobs:
         run: npx --no-install prisma generate
       - name: Compile TypeScript app and editor contracts
         run: npx --no-install tsc --noEmit
+      - name: Build production frontend without deploying it
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
       - name: Whitespace and patch checks
         run: git diff --check HEAD~1 HEAD
