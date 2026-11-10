@@ -1,0 +1,13 @@
+# NEXUS 064: local-only demo image. Deliberately NO custom WhatsApp/socket scheduler server.
+FROM node:22-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY prisma/ ./prisma/
+RUN npx --no-install prisma generate
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
+EXPOSE 39164
+# Entry point/port/seed are deliberately defined in the isolated Compose file only.
