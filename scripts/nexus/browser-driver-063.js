@@ -118,6 +118,12 @@
       ||persisted.json.data?.draftRevision<1
       ||persisted.json.data?.publishedGraph!==null
       ||persisted.json.data?.status!=="DRAFT")throw Error("Cookie browser reload disagrees with stored graph");
+    // A clean reload must not create an additional revision by reordering JSON keys.
+    const revisionAfterReload=persisted.json.data.draftRevision;
+    await wait(2200);
+    const stable=await asJson("/api/flows/nexus063_owner_session/nexus063_owner_flow");
+    if(stable.status!==200||stable.json.data?.draftRevision!==revisionAfterReload)
+      throw Error("Spurious autosave after reload: draft revision changed without an edit");
     pass({Role:"owner",Nodes:3,Edges:1,Revision:persisted.json.data.draftRevision,
       Cookie:"httponly",Auth:"credentials-jwt",Published:"false"});
   }
