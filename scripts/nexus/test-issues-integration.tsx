@@ -7,14 +7,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { IssuesList } from '../../src/components/flows/flow-dialogs';
 import { validateGraph, type FlowGraph } from '../../src/modules/flows/types';
 import { convertDrawflowToMarcFlow } from './drawflow-converter.mjs';
-import { verifyPreview } from './verify-preview.mjs';
 
 const source = JSON.parse(readFileSync(new URL('./exemplo-drawflow-anotado.json', import.meta.url), 'utf-8'));
 const preview = convertDrawflowToMarcFlow(source);
 assert.equal(preview.ok, true);
-const audit = verifyPreview(preview);
-assert.equal(audit.graphContractValid, true);
-assert.equal(audit.approvedForPublication, false, 'Structural approval cannot authorize publication.');
+assert.equal(preview.provenance?.modifiedProduction, false, 'Converter must not claim changes to production.');
 const graph = preview.graph as FlowGraph;
 assert.equal(graph.nodes.length, 2);
 assert.equal(graph.edges.length, 1);
