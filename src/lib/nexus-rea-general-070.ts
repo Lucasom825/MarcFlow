@@ -174,8 +174,9 @@ export async function getRea070RunState(id:number,
     };
     return {...base,state:"completed",report:compact};
   }catch(e){
-    if(e instanceof Rea070Error && e.code==="INVALID_SUMMARY")throw e;
-    if(e instanceof Rea070Error && e.code!=="NOT_FOUND")throw e;
-    return {...base,state:"result_pending"};
+    if(e instanceof Rea070Error && e.code==="NOT_FOUND")return {...base,state:"result_pending"};
+    if(e instanceof Rea070Error)throw e;
+    throw new Rea070Error("INVALID_SUMMARY","Não foi possível validar o resumo publicado.");
+
   }
 }
