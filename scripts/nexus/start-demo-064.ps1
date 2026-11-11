@@ -2,11 +2,15 @@
 NEXUS 064 — execute in Windows PowerShell from a local clone:
   powershell -ExecutionPolicy Bypass -File .\scripts\nexus\start-demo-064.ps1
 Run again to restart without losing edits. -Stop preserves the private MySQL volume.
+  -DiagnoseLogin: read-only verification of the local demo password hash
+  -RepairLogin: opt-in repair of ONLY the synthetic demo user's password hash.
 No merge, production deploy, WhatsApp pairing, or cloud resources are performed.
 #>
 param(
     [switch]$Stop,
-    [switch]$Status
+    [switch]$Status,
+    [switch]$DiagnoseLogin,
+    [switch]$RepairLogin
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
@@ -40,7 +44,40 @@ if ($Stop -or $Status) {
     exit 0
 }
 
+if ($DiagnoseLogin -or $RepairLogin) {
+    if (!(Test-Path $envFile)) {
+        throw "Não foi encontrado .env.nexus-demo nesta pasta. Execute primeiro o instalador normal."
+    }
+    if ($DiagnoseLogin -and $RepairLogin) {
+        throw "Escolha apenas uma opção: -DiagnoseLogin ou -RepairLogin."
+    }
+    Write-Host "Verificando apenas o banco fictício do NEXUS, sem apagar rascunhos."
+    & docker @composeArgs up -d --build
+    if ($LASTEXITCODE -ne 0) { throw "Falha ao iniciar o Docker da demonstração." }
+    $operation = if ($RepairLogin) { "repair" } else { "check" }
+    & docker @composeArgs exec -T app npx --no-install tsx scripts/nexus/demo-login-doctor-065.ts $operation
+    if ($LASTEXITCODE -ne 0) {
+        throw "O diagnóstico não foi concluído. Consulte os logs locais, sem compartilhar senhas ou tokens."
+    }
+    if ($RepairLogin) {
+        Write-Host "Apenas a senha da conta fictícia foi sincronizada com o arquivo local."
+        Write-Host "Abra http://localhost:39164/auth/login com demo@nexus.invalid."
+        Write-Host "A senha está em .env.nexus-demo na linha NEXUS_DEMO_PASSWORD."
+    } else {
+        Write-Host "Se aparecer CREDENTIALS_MISMATCH=true, execute explicitamente o comando com -RepairLogin."
+        Write-Host "Se aparecer CREDENTIALS_MATCH=true, a senha no banco corresponde ao arquivo local."
+    }
+    exit 0
+}
+
 if (!(Test-Path $envFile)) {
+    # Docker Compose uses the same named MySQL volume across ZIP extractions.
+    # A new folder must NOT generate new DB credentials for an old database.
+    $volumes = @(& docker volume ls --format "{{.Name}}")
+    if ($LASTEXITCODE -ne 0) { throw "Não foi possível consultar os volumes do Docker Desktop." }
+    if ($volumes -contains "nexus064-demo_demo_mysql_data") {
+        throw "Já existe um banco de demonstração no Docker, mas não há .env.nexus-demo nesta pasta. Volte à pasta da instalação anterior e reutilize o arquivo .env.nexus-demo original. NÃO apague o volume MySQL: ele contém seus rascunhos."
+    }
     $mysqlPass = New-Secret 20
     $rootPass = New-Secret 24
     $authSecret = New-Secret 32
