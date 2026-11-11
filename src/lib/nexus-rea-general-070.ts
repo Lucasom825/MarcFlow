@@ -1,9 +1,10 @@
 /**
  * NEXUS 070: opt-in, bounded dispatch to the existing REA workflow.
- * Requires an independent GitHub Actions:write credential IN SERVER ENV only.
+ * Requires GitHub Actions:write credential injected as a mounted Codespaces Docker secret.
  * No credential in user-visible application, .env.nexus-demo or repository.
  */
 import {inspectPublicRepo,fetchPublicGithub,PreflightError} from "@/lib/nexus-public-preflight";
+import {readFileSync} from "node:fs";
 export const REA_GENERAL_REF="nexus/rea-public-jobs-070-20261111";
 export const REA_GENERAL_WORKFLOW="nexus-rea-toolkit.yml";
 export const REA_GENERAL_REPO="Lucasom825/rea";
@@ -37,8 +38,18 @@ export async function validateRea070Request(input:unknown,
     throw new Rea070Error("INVALID_DIRECTORY","A pasta escolhida não foi confirmada no inventário JavaScript.");
   return value;
 }
+/** Read the optional mounted Docker secret; no direct token environment fallback. */
+function readDispatchSecret():string {
+  const path=process.env.NEXUS_REA_DISPATCH_TOKEN_FILE;
+  // A fixed location prevents an accidentally configured arbitrary read path.
+  if(path!=="/run/secrets/nexus_rea_dispatch_token")return "";
+  try {
+    const token=readFileSync(path,"utf8").trim();
+    return token.length>=12 && token.length<=8192 ? token : "";
+  }catch{return "";}
+}
 export function reaDispatchReady():boolean{
-  return Boolean(process.env.NEXUS_REA_DISPATCH_TOKEN?.trim());
+  return Boolean(readDispatchSecret());
 }
 export type DispatchResult={status:"TRACKABLE"|"SUBMITTED_UNTRACKED";run_id:number|null;workflow_url:string};
 const RUN_RE=/^[1-9][0-9]{0,15}$/;
@@ -50,7 +61,7 @@ export function validateRunId(input:unknown):number{
 }
 export async function dispatchRea070(input:NewReaRequest,
     http:typeof fetch=fetch):Promise<DispatchResult> {
-  const token=process.env.NEXUS_REA_DISPATCH_TOKEN;
+  const token=readDispatchSecret();
   if(!token?.trim())throw new Rea070Error("NOT_CONFIGURED","Conexão de autorização GitHub Actions ainda não configurada.");
   // Never accept caller-supplied branch, workflow, API host or headers.
   const url="https://api.github.com/repos/"+REA_GENERAL_REPO+"/actions/workflows/"+REA_GENERAL_WORKFLOW+"/dispatches";
