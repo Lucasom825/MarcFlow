@@ -1,0 +1,48 @@
+name: NEXUS 067 - public GitHub preflight and REA handoff safety
+on:
+  push:
+    branches:
+      - nexus/rea-public-preview-067-20261111
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Pin Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install lockfile dependencies without side effects
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client for static typecheck
+        run: npx --no-install prisma generate
+      - name: Public repo preflight and API firewall tests
+        run: npx --no-install tsx --test scripts/nexus/test-public-preflight-067.ts
+      - name: Existing demo API guard and flow contract regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types --test scripts/nexus/test-demo-policy-064.mjs
+          node --test scripts/nexus/test-drawflow-converter.mjs
+          node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: TypeScript compile checking of actual Next and React source
+        run: npx --no-install tsc --noEmit --pretty false
+      - name: Only review-scoped source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=4a2da79e54c9372870fa5aca64f5df29de1c285e
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/067-scoped.txt"
+          if grep -Ev '^(src/lib/nexus-public-preflight.ts$|src/lib/nexus-demo-policy.ts$|src/app/api/nexus/public-inspect/route.ts$|src/app/dashboard/nexus/rea/page.tsx$|src/components/dashboard/sidebar-nav.tsx$|scripts/nexus/|\.github/workflows/nexus-067-rea-preflight.yml$)' "$RUNNER_TEMP/067-scoped.txt"; then
+            echo "Unreviewed source changes"; exit 1
+          fi
+          echo "NEXUS067_MAIN_AND_EXISTING_DEMO_UNCHANGED=true"
