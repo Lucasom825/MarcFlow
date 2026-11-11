@@ -20,6 +20,7 @@ export function allowNexusDemoApi(pathname: string, method: string): boolean {
   }
   // NEXUS 067: only read-only authenticated public repository preflight.
   if (pathname === "/api/nexus/public-inspect") return m === "GET";
+  if (pathname === "/api/nexus/rea/report") return m === "GET";
     const match = FLOW.exec(pathname);
   if (!match) return false;
   const flowId = match[1], subroute = match[2];
