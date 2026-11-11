@@ -11,16 +11,17 @@ export async function POST(request:NextRequest){
   const session=await auth();
   if(session?.user?.email?.toLowerCase()!=="demo@nexus.invalid")
     return NextResponse.json({error:"Login de demonstração exigido."},{status:401});
-  // Codespaces HTTPS is reverse-proxied: request.nextUrl.origin may be http://localhost.
-  // Compare only to the trusted public URL set in our Docker Compose AUTH_URL.
-  // Never trust a client-supplied Host or X-Forwarded-Host to authorize a dispatch.
+  // The public origin is set once by the trusted Codespaces bootstrap.
+  // Auth.js's AUTH_URL may be auto-derived from proxy headers and must NOT
+  // be used as the independent CSRF allowlist. Never trust browser Host,
+  // forwarded headers or user-controlled URLs to authorize GitHub dispatch.
   const originDiagnostic=diagnoseReaDemoOrigin(
-    request.headers.get("origin"),process.env.AUTH_URL);
+    request.headers.get("origin"),process.env.NEXUS_REA_ALLOWED_ORIGIN);
   if(originDiagnostic!=="ORIGIN_OK")
     return NextResponse.json({
       error:"Origem não autorizada.",
       code:originDiagnostic,
-      diagnostic_version:"NEXUS071_ORIGIN_DIAG_1"
+      diagnostic_version:"NEXUS071_ORIGIN_DIAG_2"
     },{status:403,headers:{"Cache-Control":"private, no-store"}});
   if(!reaDispatchReady())
     return NextResponse.json({error:"A autorização segura do GitHub Actions não foi conectada ao servidor."},{status:503});
