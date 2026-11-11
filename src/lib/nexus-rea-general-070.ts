@@ -48,8 +48,8 @@ function readDispatchSecret():string {
     return token.length>=12 && token.length<=8192 ? token : "";
   }catch{return "";}
 }
-export function reaDispatchReady():boolean{
-  return Boolean(readDispatchSecret());
+export function reaDispatchReady(getToken:()=>string=readDispatchSecret):boolean{
+  return Boolean(getToken());
 }
 export type DispatchResult={status:"TRACKABLE"|"SUBMITTED_UNTRACKED";run_id:number|null;workflow_url:string};
 const RUN_RE=/^[1-9][0-9]{0,15}$/;
@@ -60,8 +60,8 @@ export function validateRunId(input:unknown):number{
   return Number(s);
 }
 export async function dispatchRea070(input:NewReaRequest,
-    http:typeof fetch=fetch):Promise<DispatchResult> {
-  const token=readDispatchSecret();
+    http:typeof fetch=fetch, getToken:()=>string=readDispatchSecret):Promise<DispatchResult> {
+  const token=getToken();
   if(!token?.trim())throw new Rea070Error("NOT_CONFIGURED","Conexão de autorização GitHub Actions ainda não configurada.");
   // Never accept caller-supplied branch, workflow, API host or headers.
   const url="https://api.github.com/repos/"+REA_GENERAL_REPO+"/actions/workflows/"+REA_GENERAL_WORKFLOW+"/dispatches";
