@@ -27,16 +27,23 @@ test("full server re-validation rejects stale SHA, license and unexpected scope"
   {candidate_js_directories:["src"]},{javascript_files:0}
  ])await assert.rejects(()=>validateRea070Request(request,mock(extra) as any),Rea070Error);
 });
-test("server cannot dispatch without a server-only secret",async()=>{
- const old=process.env.NEXUS_REA_DISPATCH_TOKEN;
- delete process.env.NEXUS_REA_DISPATCH_TOKEN;
- assert.equal(reaDispatchReady(),false);
- await assert.rejects(()=>dispatchRea070(request),Rea070Error);
- if(old!==undefined)process.env.NEXUS_REA_DISPATCH_TOKEN=old;
+test("server cannot dispatch without a mounted secret; shell environment is ignored",async()=>{
+ const old=process.env.NEXUS_REA_DISPATCH_TOKEN_FILE;
+ const accidental=process.env.NEXUS_REA_DISPATCH_TOKEN;
+ delete process.env.NEXUS_REA_DISPATCH_TOKEN_FILE;
+ process.env.NEXUS_REA_DISPATCH_TOKEN="fake-token-that-must-not-enable-dispatch";
+ try{
+   assert.equal(reaDispatchReady(),false);
+   await assert.rejects(()=>dispatchRea070(request),Rea070Error);
+   assert.equal(reaDispatchReady(()=>"fake-unit-test-token"),true);
+ }finally{
+   if(old===undefined)delete process.env.NEXUS_REA_DISPATCH_TOKEN_FILE;
+   else process.env.NEXUS_REA_DISPATCH_TOKEN_FILE=old;
+   if(accidental===undefined)delete process.env.NEXUS_REA_DISPATCH_TOKEN;
+   else process.env.NEXUS_REA_DISPATCH_TOKEN=accidental;
+ }
 });
 test("dispatch uses only fixed API host, branch, workflow and public source-only inputs",async()=>{
- const old=process.env.NEXUS_REA_DISPATCH_TOKEN;
- process.env.NEXUS_REA_DISPATCH_TOKEN="fake-unit-test-only-not-real";
  let called=false;
  const http=async(url:string|URL|Request,init?:RequestInit)=>{
    called=true;
@@ -49,18 +56,13 @@ test("dispatch uses only fixed API host, branch, workflow and public source-only
    });
    return new Response(JSON.stringify({workflow_run_id:43012345000}),{status:200});
  };
- try{
-   const out=await dispatchRea070(request,http as typeof fetch);
-   assert.equal(called,true);assert.equal(out.status,"TRACKABLE");
-   assert.equal(out.run_id,43012345000);
- }finally{if(old===undefined)delete process.env.NEXUS_REA_DISPATCH_TOKEN;else process.env.NEXUS_REA_DISPATCH_TOKEN=old;}
+ const out=await dispatchRea070(request,http as typeof fetch,()=>"fake-unit-test-only");
+ assert.equal(called,true);assert.equal(out.status,"TRACKABLE");
+ assert.equal(out.run_id,43012345000);
 });
 test("legacy 204 no-run-ID response is not invented",async()=>{
- const old=process.env.NEXUS_REA_DISPATCH_TOKEN;process.env.NEXUS_REA_DISPATCH_TOKEN="fake";
- try{
-   const result=await dispatchRea070(request,(async()=>new Response(null,{status:204})) as typeof fetch);
-   assert.deepEqual({state:result.status,id:result.run_id},{state:"SUBMITTED_UNTRACKED",id:null});
- }finally{if(old===undefined)delete process.env.NEXUS_REA_DISPATCH_TOKEN;else process.env.NEXUS_REA_DISPATCH_TOKEN=old;}
+ const result=await dispatchRea070(request,(async()=>new Response(null,{status:204})) as typeof fetch,()=>"fake-unit-test");
+ assert.deepEqual({state:result.status,id:result.run_id},{state:"SUBMITTED_UNTRACKED",id:null});
 });
 test("status is restricted to correct workflow branch and event",async()=>{
  const runId=43012345000,repo="Lucasom825/rea";
