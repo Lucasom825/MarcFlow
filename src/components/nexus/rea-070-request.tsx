@@ -58,7 +58,12 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
         body:JSON.stringify({repository:target.repository,commit:target.pinned_sha,directory:scope})
       });
       const data=await response.json();
-      if(!response.ok)throw new Error(data.error||"Não foi possível criar o job.");
+      if(!response.ok)throw new Error(
+        (data.error||"Não foi possível criar o job.")+
+        (typeof data.code==="string" ? " [Código: "+data.code+"]" : "")+
+        (data.diagnostic_version==="NEXUS071_ORIGIN_DIAG_1" ?
+          " [Diagnóstico 071.1]" : "")
+      );
       if(data.run_id && Number.isSafeInteger(data.run_id)){
         setRunId(data.run_id);
         const url=new URL(window.location.href);
@@ -75,7 +80,7 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
   const checks=report?.checks as Record<string,number>|undefined;
   const source=report?.target as Record<string,string>|undefined;
   return <section className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-    <div className="flex items-center gap-2 text-base font-semibold"><ShieldCheck className="h-5 w-5 text-emerald-700"/> NEXUS 070 — Solicitar análise REA</div>
+    <div className="flex items-center gap-2 text-base font-semibold"><ShieldCheck className="h-5 w-5 text-emerald-700"/> NEXUS 071 — Solicitar análise REA</div>
     <p className="text-sm text-muted-foreground">
       Envia ao workflow REA apenas o repositório público, commit fixado e pasta validada.
       Não instala ou executa código externo no NEXUS.
