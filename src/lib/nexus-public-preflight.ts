@@ -32,77 +32,7 @@ const MAX_REPOSITORY_KB = 75_000;
 const MAX_TREE_FILES = 3000;
 export async function inspectPublicRepo(input: string, get: GitHubFetcher) {
     const { owner, repo } = parsePublicRepository(input);
-    const prefix = "/repos/" + owner + "/" + repo;
-    const metadata = await get(prefix) as Record<string, any>;
-    if (!metadata || metadata.private !== false) throw new PreflightError("NOT_PUBLIC", "Repositório não confirmado como público.");
-    if (metadata.archived) throw new PreflightError("ARCHIVED", "Repositório arquivado; escolha uma opção ativa.");
-    if (!Number.isInteger(metadata.size) || metadata.size > MAX_REPOSITORY_KB)
-        throw new PreflightError("SIZE_LIMIT", "Repositório grande demais para esta pré-análise.");
-    if (typeof metadata.default_branch !== "string" || metadata.default_branch.length > 120)
-        throw new PreflightError("INVALID_BRANCH", "Branch padrão não disponível.");
-
-    const shaRecord = await get(prefix + "/commits/" + encodeURIComponent(metadata.default_branch)) as Record<string, any>;
-    const sha = shaRecord?.sha;
-    if (typeof sha !== "string" || !/^[a-f0-9]{40}$/i.test(sha))
-        throw new PreflightError("INVALID_SHA", "Não foi possível fixar uma versão imutável do projeto.");
-
-    const tree = await get(prefix + "/git/trees/" + sha + "?recursive=1") as Record<string, any>;
-    if (!tree || tree.truncated !== false || !Array.isArray(tree.tree) || tree.tree.length > MAX_TREE_FILES)
-        throw new PreflightError("TREE_INCOMPLETE", "A árvore de arquivos ultrapassou os limites ou está incompleta.");
-    const files: GithubTreeItem[] = tree.tree.filter((x: GithubTreeItem) =>
-        x && x.type === "blob" && typeof x.path === "string" && x.path.length <= 280);
-    const js = files.filter(x => x.path && /\.(?:js|mjs|cjs|jsx)$/i.test(x.path));
-    const ts = files.filter(x => x.path && /\.(?:ts|tsx|mts|cts)$/i.test(x.path));
-    const top = [...new Set(files.map(x => x.path!.split("/")[0]))].slice(0, 25);
-    const evidenceFolders = [...new Set(js.map(x => x.path!.split("/").slice(0,-1).join("/") || "."))
-        ].filter(x => x !== "." && x.length <= 180 && /^[A-Za-z0-9_./@-]+$/.test(x))
-        .sort((a,b) => js.filter(x => x.path!.startsWith(a + "/")).length -
-                       js.filter(x => x.path!.startsWith(b + "/")).length).reverse().slice(0,8);
-    const license = typeof metadata.license?.spdx_id === "string" ? metadata.license.spdx_id : "NÃO VERIFICADA";
-
-    // Manifest is read as text only (no npm install, no scripts, no execution).
-    let packageSummary: { name: string | null; scripts: string[]; dependencies: string[] } | null = null;
-    if (files.some(x => x.path === "package.json")) {
-        try {
-            const raw = await get(prefix + "/contents/package.json?ref=" + sha) as Record<string, any>;
-            if (raw?.encoding === "base64" && typeof raw.content === "string" && raw.content.length < 180_000) {
-                const pkg = JSON.parse(Buffer.from(raw.content, "base64").toString("utf8"));
-                if (pkg && typeof pkg === "object" && !Array.isArray(pkg)) {
-                    packageSummary = {
-                        name: typeof pkg.name === "string" ? pkg.name.slice(0,100) : null,
-                        scripts: pkg.scripts && typeof pkg.scripts === "object" && !Array.isArray(pkg.scripts)
-                            ? Object.keys(pkg.scripts).slice(0,20) : [],
-                        dependencies: pkg.dependencies && typeof pkg.dependencies === "object" && !Array.isArray(pkg.dependencies)
-                            ? Object.keys(pkg.dependencies).slice(0,40) : [],
-                    };
-                }
-            }
-        } catch { /* Explicitly incomplete instead of inventing a manifest. */ }
-    }
-    return {
-        status: "PREFLIGHT_ONLY" as const,
-        repository: owner + "/" + repo,
-        pinned_sha: sha.toLowerCase(),
-        source_url: "https://github.com/" + owner + "/" + repo + "/tree/" + sha,
-        description: typeof metadata.description === "string" ? metadata.description.slice(0,320) : null,
-        license,
-        license_allowlisted_for_toolkit: ALLOW_LICENSE.has(license),
-        repository_size_kb: metadata.size as number,
-        entries: files.length,
-        javascript_files: js.length,
-        typescript_files: ts.length,
-        sample_top_level: top,
-        candidate_js_directories: evidenceFolders,
-        package_summary: packageSummary,
-        caveat: "Leitura estática preliminar; a REA ainda não foi executada. Licença requer avaliação humana e dependências não foram instaladas.",
-    };
-}
-
-/** Fetcher bound to a CONSTANT trusted domain; input is validated before URL construction. */
-export async function fetchPublicGithub(path: string): Promise<unknown> {
-    const prefix = String.raw\`\\/repos\\/[A-Za-z0-9][A-Za-z0-9._-]{0,98}\\/[A-Za-z0-9][A-Za-z0-9._-]{0,98}\`;
-    const allowed = new RegExp("^" + prefix +
-        String.raw\`(?:$|\\/commits\\/[A-Za-z0-9._%+-]+|\\/git\\/trees\\/[a-fA-F0-9]{40}\\?recursive=1|\\/contents\\/package\\.json\\?ref=[a-fA-F0-9]{40})$\`);
+    const allowed = /^\/repos\/[A-Za-z0-9][A-Za-z0-9._-]{0,98}\/[A-Za-z0-9][A-Za-z0-9._-]{0,98}(?:$|\/commits\/[A-Za-z0-9._%+-]+|\/git\/trees\/[a-fA-F0-9]{40}\?recursive=1|\/contents\/package\.json\?ref=[a-fA-F0-9]{40})$/;
     if (!allowed.test(path) || path.includes("..") || /%2e/i.test(path))
         throw new PreflightError("INVALID_ENDPOINT", "Endpoint não permitido.");
     const controller = new AbortController();
