@@ -71,6 +71,13 @@ if ($DiagnoseLogin -or $RepairLogin) {
 }
 
 if (!(Test-Path $envFile)) {
+    # Docker Compose uses the same named MySQL volume across ZIP extractions.
+    # A new folder must NOT generate new DB credentials for an old database.
+    $volumes = @(& docker volume ls --format "{{.Name}}")
+    if ($LASTEXITCODE -ne 0) { throw "Não foi possível consultar os volumes do Docker Desktop." }
+    if ($volumes -contains "nexus064-demo_demo_mysql_data") {
+        throw "Já existe um banco de demonstração no Docker, mas não há .env.nexus-demo nesta pasta. Volte à pasta da instalação anterior e reutilize o arquivo .env.nexus-demo original. NÃO apague o volume MySQL: ele contém seus rascunhos."
+    }
     $mysqlPass = New-Secret 20
     $rootPass = New-Secret 24
     $authSecret = New-Secret 32
