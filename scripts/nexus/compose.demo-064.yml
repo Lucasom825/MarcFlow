@@ -30,9 +30,9 @@ services:
       DATABASE_URL: mysql://nexus_demo:${MYSQL_PASSWORD:?}@db:3306/nexus_demo
       AUTH_SECRET: ${AUTH_SECRET:?Generated local demo Auth.js secret required}
       AUTH_TRUST_HOST: "true"
-      AUTH_URL: http://localhost:39164
-      NEXTAUTH_URL: http://localhost:39164
-      NEXT_PUBLIC_APP_URL: http://localhost:39164
+      AUTH_URL: ${NEXUS_DEMO_ORIGIN:-http://localhost:39164}
+      NEXTAUTH_URL: ${NEXUS_DEMO_ORIGIN:-http://localhost:39164}
+      NEXT_PUBLIC_APP_URL: ${NEXUS_DEMO_ORIGIN:-http://localhost:39164}
       NEXT_PUBLIC_ALLOW_INDEXING: "false"
       NEXUS_DEMO_ONLY: "true"
       NEXT_PUBLIC_NEXUS_DEMO_ONLY: "true"
@@ -50,7 +50,7 @@ services:
         npx --no-install tsx scripts/nexus/demo-seed-064.ts
         exec npx --no-install next dev --webpack -H 0.0.0.0 -p 39164
     ports:
-      - "127.0.0.1:39164:39164"
+      - "${NEXUS_DEMO_PORT_BIND:-127.0.0.1}:39164:39164"
     networks:
       - demo_network
     healthcheck:

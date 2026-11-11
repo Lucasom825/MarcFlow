@@ -1,0 +1,71 @@
+name: NEXUS 066 - Codespaces demo config read-only CI validation
+on:
+  push:
+    branches:
+      - nexus/codespaces-demo-066-20261111
+permissions:
+  contents: read
+jobs:
+  codespace-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout experimental branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify dev container configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'JS'
+          const fs = require("node:fs");
+          const dc = JSON.parse(fs.readFileSync(".devcontainer/devcontainer.json","utf8"));
+          if (!dc.forwardPorts.includes(39164)) throw Error("Expected port forward");
+          if (!Object.keys(dc.features).some(x=>x.includes("docker-in-docker"))) throw Error("Missing Docker-in-Docker");
+          if (dc.postCreateCommand?.includes("start-codespace")) throw Error("Unexpected auto-start causing consumption");
+          console.log("NEXUS066_DEVCONTAINER_CONFIG_PASS=true");
+          JS
+      - name: Validate Codespaces shell scripts without running deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/nexus/start-codespace-066.sh
+          bash -n scripts/nexus/check-codespace-066.sh
+          if CODESPACES=false bash scripts/nexus/start-codespace-066.sh > /dev/null 2>&1; then
+            echo "Expected guard to refuse non-Codespaces use"; exit 1
+          fi
+          echo "NEXUS066_SHELL_GUARD_PASS=true"
+      - name: Validate private-origin Compose interpolation and API restrictions
+        shell: bash
+        env:
+          MYSQL_PASSWORD: "ci_only_nexus066_mysql"
+          MYSQL_ROOT_PASSWORD: "ci_only_nexus066_root"
+          NEXUS_DEMO_PASSWORD: "ci_only_nexus066_owner_password"
+          AUTH_SECRET: "ci_only_nexus066_authsecret"
+          NEXUS_DEMO_ORIGIN: "https://synthetic-codespace-39164.app.github.dev"
+        run: |
+          set -euo pipefail
+          docker compose -f scripts/nexus/compose.demo-064.yml config > "$RUNNER_TEMP/066-compose.txt"
+          grep -Fq 'https://synthetic-codespace-39164.app.github.dev' "$RUNNER_TEMP/066-compose.txt"
+          grep -Fq '127.0.0.1:39164:39164' scripts/nexus/compose.demo-064.yml || grep -Fq 'NEXUS_DEMO_PORT_BIND:-127.0.0.1' scripts/nexus/compose.demo-064.yml
+          grep -Fq 'NEXUS_DEMO_ONLY' scripts/nexus/compose.demo-064.yml
+          ! grep -Fq 'src/server/index.ts' scripts/nexus/compose.demo-064.yml
+          echo 'NEXUS066_COMPOSE_HTTPS_ORIGIN_PRIVATE_BIND_PASS=true'
+      - name: Existing converter and MarcFlow contract tests
+        shell: bash
+        run: |
+          node --test scripts/nexus/test-drawflow-converter.mjs
+          node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Verify no production changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=1c25e63e4ba2674dca27491e18fb46c222b1d37c
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/066-changed.txt"
+          if grep -Ev '^(scripts/nexus/|\.devcontainer/|\.github/workflows/nexus-066-codespaces.yml$)' "$RUNNER_TEMP/066-changed.txt"; then
+            echo 'Unexpected production file changed'; exit 1
+          fi
+          echo "NEXUS066_MAIN_UNCHANGED=true"

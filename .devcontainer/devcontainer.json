@@ -1,0 +1,18 @@
+{
+  "name": "NEXUS demonstrador isolado (GitHub Codespaces)",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {}
+  },
+  "forwardPorts": [
+    39164
+  ],
+  "portsAttributes": {
+    "39164": {
+      "label": "NEXUS — demonstração privada",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "bash scripts/nexus/check-codespace-066.sh",
+  "remoteUser": "node"
+}
