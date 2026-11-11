@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { ReaVerifiedReport } from "@/components/nexus/rea-verified-report";
 import { ExternalLink, GitBranch, ShieldCheck, Search, Copy, AlertTriangle } from "lucide-react";
 
 type Preflight = {
@@ -56,6 +57,8 @@ export default function ReaPreflightPage() {
           Depois, use os dados verificados para iniciar manualmente a análise profunda na REA.
         </p>
       </header>
+
+      <ReaVerifiedReport />
 
       <form onSubmit={inspect} className="rounded-2xl border bg-card p-5 space-y-3">
         <label htmlFor="nexus-repository" className="text-sm font-semibold">Repositório público no GitHub</label>

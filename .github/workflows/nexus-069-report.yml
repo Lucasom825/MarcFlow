@@ -1,0 +1,63 @@
+name: NEXUS 069 - verified REA report ingestion
+on:
+  push:
+    branches: [nexus/rea-report-view-069-20261111]
+permissions:
+  contents: read
+jobs:
+  verify-report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated review branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Use Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install lockfile dependencies, no post-install scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma types for read-only static checks
+        run: npx --no-install prisma generate
+      - name: Validate fixtures, source limits and demo API firewall
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-rea-report-069.ts
+          npx --no-install tsx --test scripts/nexus/test-public-preflight-067.ts
+      - name: Validate actual public GitHub REA publication and run status
+        run: npx --no-install tsx scripts/nexus/prove-live-rea-report-069.ts
+      - name: Existing editor and API safety regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types --test scripts/nexus/test-demo-policy-064.mjs
+          node --test scripts/nexus/test-drawflow-converter.mjs
+          node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Typecheck application source, excluding legacy CI fixture debt
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus069.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus069.temp.json
+          rm tsconfig.nexus069.temp.json
+          echo "NEXUS069_APP_TYPECHECK_OK=true"
+      - name: Confirm only isolated report UI and API changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=788f809adc5660a23e5ed1b932a6db4e66a72fd3
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/new-files.txt"
+          if grep -Ev '^(src/lib/nexus-rea-public-report.ts|src/lib/nexus-demo-policy.ts|src/app/api/nexus/rea/report/route.ts|src/app/dashboard/nexus/rea/.*|src/components/nexus/.*|scripts/nexus/.*-069.ts|scripts/nexus/NEXUS-069-RESULTADOS-REA.md|\.github/workflows/nexus-069-report.yml)$' "$RUNNER_TEMP/new-files.txt"; then
+            echo "Unexpected source modified"; exit 1
+          fi
+          echo "NEXUS069_EDITOR_UNCHANGED=true"
