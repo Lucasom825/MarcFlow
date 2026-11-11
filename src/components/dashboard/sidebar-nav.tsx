@@ -27,7 +27,8 @@ import {
     MessageCircleReply,
     Contact,
     UserPlus,
-    DatabaseBackup
+    DatabaseBackup,
+    GitBranch
 } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
 import {
@@ -49,6 +50,7 @@ interface NavItem {
     external?: boolean;
     superadminOnly?: boolean;
     allowedRoles?: string[];
+    demoOnly?: boolean;
 }
 
 export const navGroups: NavGroup[] = [
@@ -92,6 +94,7 @@ export const navGroups: NavGroup[] = [
         items: [
             { href: "/docs", label: "Documentação da API", icon: FileText },
             { href: "/swagger", label: "Swagger UI", icon: Code, external: true },
+            { href: "/dashboard/nexus/rea", label: "REA — código público", icon: GitBranch, demoOnly: true },
         ],
     },
     {
@@ -124,6 +127,7 @@ export function SidebarNav() {
             <nav className="flex-1 px-4 pb-4 overflow-y-auto overflow-x-hidden space-y-0.5 sidebar-scrollbar">
                 {navGroups.map((group) => {
                     const visibleItems = group.items.filter((item) => {
+                        if (item.demoOnly && process.env.NEXT_PUBLIC_NEXUS_DEMO_ONLY !== "true") return false;
                         if (item.superadminOnly && userRole !== "SUPERADMIN") return false;
                         if (item.allowedRoles && (!userRole || !item.allowedRoles.includes(userRole))) return false;
                         return true;
