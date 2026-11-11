@@ -3,6 +3,7 @@ import {auth} from "@/lib/auth";
 import {validateRea070Request,dispatchRea070,reaDispatchReady,Rea070Error}
   from "@/lib/nexus-rea-general-070";
 import {PreflightError} from "@/lib/nexus-public-preflight";
+import {isAuthorizedReaDemoOrigin} from "@/lib/nexus-rea-demo-origin";
 export const runtime="nodejs"; export const dynamic="force-dynamic";
 const cooldown=new Map<string,number>();
 export async function POST(request:NextRequest){
@@ -10,9 +11,10 @@ export async function POST(request:NextRequest){
   const session=await auth();
   if(session?.user?.email?.toLowerCase()!=="demo@nexus.invalid")
     return NextResponse.json({error:"Login de demonstração exigido."},{status:401});
-  // Require browser same-origin, never accept a blind cross-site dispatch.
-  const origin=request.headers.get("origin");
-  if(!origin || origin!==request.nextUrl.origin)
+  // Codespaces HTTPS is reverse-proxied: request.nextUrl.origin may be http://localhost.
+  // Compare only to the trusted public URL set in our Docker Compose AUTH_URL.
+  // Never trust a client-supplied Host or X-Forwarded-Host to authorize a dispatch.
+  if(!isAuthorizedReaDemoOrigin(request.headers.get("origin"),process.env.AUTH_URL))
     return NextResponse.json({error:"Origem não autorizada."},{status:403});
   if(!reaDispatchReady())
     return NextResponse.json({error:"A autorização segura do GitHub Actions não foi conectada ao servidor."},{status:503});
