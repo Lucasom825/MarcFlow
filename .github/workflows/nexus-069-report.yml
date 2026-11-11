@@ -57,7 +57,7 @@ jobs:
           BASE=788f809adc5660a23e5ed1b932a6db4e66a72fd3
           git diff --check "$BASE" HEAD
           git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/new-files.txt"
-          if grep -Ev '^(src/lib/nexus-rea-public-report.ts|src/lib/nexus-demo-policy.ts|src/app/api/nexus/rea/report/route.ts|src/app/dashboard/nexus/rea/.*|src/components/nexus/.*|scripts/nexus/.*-069.ts|\.github/workflows/nexus-069-report.yml)$' "$RUNNER_TEMP/new-files.txt"; then
+          if grep -Ev '^(src/lib/nexus-rea-public-report.ts|src/lib/nexus-demo-policy.ts|src/app/api/nexus/rea/report/route.ts|src/app/dashboard/nexus/rea/.*|src/components/nexus/.*|scripts/nexus/.*-069.ts|scripts/nexus/NEXUS-069-RESULTADOS-REA.md|\.github/workflows/nexus-069-report.yml)$' "$RUNNER_TEMP/new-files.txt"; then
             echo "Unexpected source modified"; exit 1
           fi
           echo "NEXUS069_EDITOR_UNCHANGED=true"
