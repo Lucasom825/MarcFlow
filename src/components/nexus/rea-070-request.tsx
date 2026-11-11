@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect,useState} from "react";
-import {AlertTriangle,ExternalLink,RefreshCcw,ShieldCheck} from "lucide-react";
+import {AlertTriangle,ExternalLink,ShieldCheck} from "lucide-react";
 
 type Target={repository:string;pinned_sha:string;license_allowlisted_for_toolkit:boolean;javascript_files:number};
 type State={run_id:number;state:"queued"|"in_progress"|"completed"|"result_pending"|"failed";conclusion:string|null;url:string;report:null|Record<string,unknown>};
@@ -113,9 +113,7 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
         </div>
         <p className="text-xs text-amber-800">Somente análise estática. Isso não comprova comportamento ou permite reconstrução automática do sistema.</p>
       </div>}
-      <button type="button" className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs" onClick={()=>setRunId(v=>v)}>
-        <RefreshCcw className="h-3.5 w-3.5"/> Atualização automática enquanto esta tela estiver aberta
-      </button>
+      <p className="text-xs text-muted-foreground">O andamento é consultado a cada 16 segundos enquanto esta página estiver aberta.</p>
     </div>}
   </section>;
 }
