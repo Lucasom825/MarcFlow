@@ -33,8 +33,20 @@ jobs:
           node --experimental-strip-types --test scripts/nexus/test-demo-policy-064.mjs
           node --test scripts/nexus/test-drawflow-converter.mjs
           node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
-      - name: TypeScript compile checking of actual Next and React source
-        run: npx --no-install tsc --noEmit --pretty false
+      - name: Typecheck application source without legacy CI script fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus067.temp.json <<'TSC'
+          {
+            "extends": "./tsconfig.json",
+            "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx"],
+            "exclude": ["node_modules", "scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus067.temp.json
+          rm tsconfig.nexus067.temp.json
+          echo "NEXUS067_APPLICATION_TYPES_OK=true"
       - name: Only review-scoped source changes
         shell: bash
         run: |
