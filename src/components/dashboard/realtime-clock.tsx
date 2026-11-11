@@ -6,11 +6,13 @@ import { Clock } from "lucide-react";
 
 export function RealtimeClock() {
     const [time, setTime] = useState("");
-    const [timezone, setTimezone] = useState("Asia/Jakarta");
+    const [timezone, setTimezone] = useState(process.env.NEXT_PUBLIC_NEXUS_DEMO_ONLY === "true" ? "America/Sao_Paulo" : "Asia/Jakarta");
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
         setMounted(true);
+        // The isolated NEXUS demonstration uses Brasília time without changing the product timezone.
+        if (process.env.NEXT_PUBLIC_NEXUS_DEMO_ONLY === "true") return;
         // Fetch global timezone
         fetch('/api/settings/system')
             .then(r => r.json())

@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { ReaVerifiedReport } from "@/components/nexus/rea-verified-report";
+import { Rea070Request } from "@/components/nexus/rea-070-request";
 import { ExternalLink, GitBranch, ShieldCheck, Search, Copy, AlertTriangle } from "lucide-react";
 
 type Preflight = {
@@ -49,12 +50,12 @@ export default function ReaPreflightPage() {
     <div className="mx-auto max-w-5xl space-y-6 pb-14">
       <header className="space-y-2">
         <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
-          <GitBranch className="h-4 w-4" /> NEXUS 067 · ponte de análise de código público
+          <GitBranch className="h-4 w-4" /> NEXUS 070 · análise supervisionada de código público
         </div>
         <h1 className="text-3xl font-bold text-foreground">Explorar repositório com a REA</h1>
         <p className="text-sm text-muted-foreground">
           Primeiro, inspecione o repositório público sem instalar ou executar seu código.
-          Depois, use os dados verificados para iniciar manualmente a análise profunda na REA.
+          Em seguida, solicite a análise na REA com autorização segura no servidor, ou use o workflow manual.
         </p>
       </header>
 
@@ -128,6 +129,7 @@ export default function ReaPreflightPage() {
             )}
             {!result.javascript_files && <p className="text-sm text-amber-700">O workflow existente requer código JavaScript; a pré-análise não encontrou arquivos compatíveis.</p>}
             <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs leading-6 text-white">{workflowInstructions}</pre>
+            <Rea070Request target={result} scope={scope}/>
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" disabled={!canRun} onClick={async () => {
                   try { await navigator.clipboard.writeText(workflowInstructions); setCopied(true); } catch { setCopied(false); }
