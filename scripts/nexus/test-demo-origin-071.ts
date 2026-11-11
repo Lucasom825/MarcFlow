@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {isAuthorizedReaDemoOrigin} from "../../src/lib/nexus-rea-demo-origin";
+import {isAuthorizedReaDemoOrigin,diagnoseReaDemoOrigin} from "../../src/lib/nexus-rea-demo-origin";
 const publicOrigin="https://automatic-space-system-4jw456q6ppjr265x-39164.app.github.dev";
 test("GitHub Codespaces forwarded HTTPS origin equals trusted AUTH_URL",()=>{
   assert.equal(isAuthorizedReaDemoOrigin(publicOrigin, publicOrigin),true);
@@ -34,4 +34,24 @@ test("localhost origin remains available only in explicitly configured local dem
   assert.equal(isAuthorizedReaDemoOrigin("http://localhost:39164","http://localhost:39164"),true);
   assert.equal(isAuthorizedReaDemoOrigin("http://127.0.0.1:39164","http://127.0.0.1:39164"),true);
   assert.equal(isAuthorizedReaDemoOrigin("http://localhost:39164","https://localhost:39164"),false);
+});
+
+test("diagnostics identify the exact class of origin failure without exposing URLs or token values",()=>{
+  const good=publicOrigin;
+  const cases=[
+    [good,good,"ORIGIN_OK"],
+    [null,good,"ORIGIN_HEADER_MISSING"],
+    [good,undefined,"AUTH_URL_MISSING"],
+    [good,"not-a-url","AUTH_URL_INVALID"],
+    [good,good+"/auth/login","AUTH_URL_INVALID"],
+    [good+"/a",good,"BROWSER_ORIGIN_INVALID"],
+    ["null",good,"BROWSER_ORIGIN_INVALID"],
+    ["https://other.example",good,"ORIGIN_MISMATCH"],
+  ] as const;
+  for(const [caller,configured,expected] of cases){
+    const result=diagnoseReaDemoOrigin(caller,configured);
+    assert.equal(result,expected);
+    assert.equal(result.includes("github.dev"),false);
+    assert.equal(result.includes("token"),false);
+  }
 });
