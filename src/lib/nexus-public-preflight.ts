@@ -100,7 +100,10 @@ export async function inspectPublicRepo(input: string, get: GitHubFetcher) {
 
 /** Fetcher bound to a CONSTANT trusted domain; input is validated before URL construction. */
 export async function fetchPublicGithub(path: string): Promise<unknown> {
-    if (!/^\/repos\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+(?:\/|$)/.test(path))
+    const prefix = String.raw\`\\/repos\\/[A-Za-z0-9][A-Za-z0-9._-]{0,98}\\/[A-Za-z0-9][A-Za-z0-9._-]{0,98}\`;
+    const allowed = new RegExp("^" + prefix +
+        String.raw\`(?:$|\\/commits\\/[A-Za-z0-9._%+-]+|\\/git\\/trees\\/[a-fA-F0-9]{40}\\?recursive=1|\\/contents\\/package\\.json\\?ref=[a-fA-F0-9]{40})$\`);
+    if (!allowed.test(path) || path.includes("..") || /%2e/i.test(path))
         throw new PreflightError("INVALID_ENDPOINT", "Endpoint não permitido.");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8500);
