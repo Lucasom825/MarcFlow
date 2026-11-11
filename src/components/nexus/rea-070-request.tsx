@@ -61,7 +61,8 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
       if(!response.ok)throw new Error(
         (data.error||"Não foi possível criar o job.")+
         (typeof data.code==="string" ? " [Código: "+data.code+"]" : "")+
-        (data.diagnostic_version==="NEXUS071_ORIGIN_DIAG_1" ?
+        (data.diagnostic_version==="NEXUS071_ORIGIN_DIAG_2" ?
+          " [Diagnóstico 071.2]" : data.diagnostic_version==="NEXUS071_ORIGIN_DIAG_1" ?
           " [Diagnóstico 071.1]" : "")
       );
       if(data.run_id && Number.isSafeInteger(data.run_id)){
