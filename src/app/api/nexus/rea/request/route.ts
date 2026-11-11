@@ -3,7 +3,7 @@ import {auth} from "@/lib/auth";
 import {validateRea070Request,dispatchRea070,reaDispatchReady,Rea070Error}
   from "@/lib/nexus-rea-general-070";
 import {PreflightError} from "@/lib/nexus-public-preflight";
-import {isAuthorizedReaDemoOrigin} from "@/lib/nexus-rea-demo-origin";
+import {diagnoseReaDemoOrigin} from "@/lib/nexus-rea-demo-origin";
 export const runtime="nodejs"; export const dynamic="force-dynamic";
 const cooldown=new Map<string,number>();
 export async function POST(request:NextRequest){
@@ -14,8 +14,14 @@ export async function POST(request:NextRequest){
   // Codespaces HTTPS is reverse-proxied: request.nextUrl.origin may be http://localhost.
   // Compare only to the trusted public URL set in our Docker Compose AUTH_URL.
   // Never trust a client-supplied Host or X-Forwarded-Host to authorize a dispatch.
-  if(!isAuthorizedReaDemoOrigin(request.headers.get("origin"),process.env.AUTH_URL))
-    return NextResponse.json({error:"Origem não autorizada."},{status:403});
+  const originDiagnostic=diagnoseReaDemoOrigin(
+    request.headers.get("origin"),process.env.AUTH_URL);
+  if(originDiagnostic!=="ORIGIN_OK")
+    return NextResponse.json({
+      error:"Origem não autorizada.",
+      code:originDiagnostic,
+      diagnostic_version:"NEXUS071_ORIGIN_DIAG_1"
+    },{status:403,headers:{"Cache-Control":"private, no-store"}});
   if(!reaDispatchReady())
     return NextResponse.json({error:"A autorização segura do GitHub Actions não foi conectada ao servidor."},{status:503});
   if(Number(request.headers.get("content-length")||0)>2000)
