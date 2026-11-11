@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {isAuthorizedReaDemoOrigin,diagnoseReaDemoOrigin} from "../../src/lib/nexus-rea-demo-origin";
 const publicOrigin="https://automatic-space-system-4jw456q6ppjr265x-39164.app.github.dev";
 test("GitHub Codespaces forwarded HTTPS origin equals trusted AUTH_URL",()=>{
@@ -54,4 +55,17 @@ test("diagnostics identify the exact class of origin failure without exposing UR
     assert.equal(result.includes("github.dev"),false);
     assert.equal(result.includes("token"),false);
   }
+});
+
+test("REA checks independent immutable Codespaces URL, never Auth.js AUTH_URL or forwarded host",()=>{
+  const route=readFileSync("src/app/api/nexus/rea/request/route.ts","utf8");
+  const compose=readFileSync("scripts/nexus/compose.rea-071.secrets.yml","utf8");
+  const bootstrap=readFileSync("scripts/nexus/start-codespace-066.sh","utf8");
+  assert.match(route,/process\.env\.NEXUS_REA_ALLOWED_ORIGIN/);
+  assert.doesNotMatch(route,/process\.env\.AUTH_URL/);
+  assert.doesNotMatch(route,/request\.nextUrl\.origin/);
+  assert.match(compose,/NEXUS_REA_ALLOWED_ORIGIN: \$\{NEXUS_DEMO_ORIGIN:\?/);
+  assert.match(bootstrap,/export NEXUS_DEMO_ORIGIN="\$origin"/);
+  assert.equal(diagnoseReaDemoOrigin(publicOrigin,publicOrigin),"ORIGIN_OK");
+  assert.equal(diagnoseReaDemoOrigin("https://evil.example",publicOrigin),"ORIGIN_MISMATCH");
 });
