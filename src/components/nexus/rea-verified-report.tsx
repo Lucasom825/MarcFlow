@@ -23,7 +23,7 @@ export function ReaVerifiedReport({detailed=false}:{detailed?:boolean}){
   },[tick]);
   const r=state.report;
   const refresh=()=>{setState({phase:"loading"});setTick(t=>t+1);};
-  const metrics=r?[ 
+  const metrics=r?[
     ["Arquivos JavaScript",r.checks.rea_parsed_js+"/"+r.checks.ast_js_files],
     ["Importações verificadas",r.checks.matched_import_sites+"/"+r.checks.ast_import_sites],
     ["Dependências internas",r.checks.ast_unique_internal_import_pairs.toLocaleString("pt-BR")],
