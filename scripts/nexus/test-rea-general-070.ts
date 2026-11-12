@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   parseRea070Request,validateRea070Request,dispatchRea070,getRea070RunState,validateRunId,
   Rea070Error,reaDispatchReady,runInfoPath,runSummaryPath,fetchRea070Public,
-  classifyReaDispatchFailure
+  classifyReaDispatchFailure,checkReaCredential
 } from "../../src/lib/nexus-rea-general-070";
 import {allowNexusDemoApi} from "../../src/lib/nexus-demo-policy";
 import {chooseReaDefaultDirectory} from "../../src/lib/nexus-rea-scope-071";
@@ -96,6 +96,41 @@ test("dispatch reports bounded GitHub errors without exposing upstream body or t
        !e.message.includes("token-secret-value")
    );
  }
+});
+
+test("read-only credential diagnostic does not dispatch or expose token",async()=>{
+ const calls:string[]=[];
+ const valid=async(url:string|URL|Request,init?:RequestInit)=>{
+   calls.push(String(url));
+   assert.equal(String(url),"https://api.github.com/user");
+   assert.equal(init?.method,"GET");
+   assert.equal((init?.headers as Record<string,string>)?.Authorization,"Bearer synthetic-credential");
+   assert.equal(init?.body,undefined);
+   return new Response(JSON.stringify({login:"Lucasom825"}),{status:200});
+ };
+ assert.deepEqual(await checkReaCredential(valid as typeof fetch,()=>"synthetic-credential"),
+   {status:"TOKEN_AUTHENTICATED",actions_write_verified:false});
+ assert.deepEqual(await checkReaCredential(valid as typeof fetch,()=>""),{
+   status:"TOKEN_MISSING",actions_write_verified:false
+ });
+ assert.deepEqual(calls,["https://api.github.com/user"]);
+ const other=async()=>new Response(JSON.stringify({login:"different-account"}),{status:200});
+ assert.equal((await checkReaCredential(other as typeof fetch,()=>"synthetic-credential")).status,
+   "TOKEN_OTHER_ACCOUNT");
+ const invalid=async()=>new Response(null,{status:401});
+ assert.equal((await checkReaCredential(invalid as typeof fetch,()=>"synthetic-credential")).status,
+   "TOKEN_REJECTED");
+ const limited=async()=>new Response(null,{
+   status:403,headers:{"x-ratelimit-remaining":"0"}
+ });
+ assert.equal((await checkReaCredential(limited as typeof fetch,()=>"synthetic-credential")).status,
+   "RATE_LIMITED");
+ const denied=async()=>new Response(null,{status:403});
+ assert.equal((await checkReaCredential(denied as typeof fetch,()=>"synthetic-credential")).status,
+   "GITHUB_FORBIDDEN");
+ const broken=async()=>{throw new Error("synthetic-token-must-not-leak")};
+ assert.equal((await checkReaCredential(broken as typeof fetch,()=>"synthetic-credential")).status,
+   "UNAVAILABLE");
 });
 
 test("legacy 204 no-run-ID response is not invented",async()=>{

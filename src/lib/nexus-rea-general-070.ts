@@ -87,6 +87,50 @@ export function classifyReaDispatchFailure(status:number, rateLimitRemaining:str
     "Não foi possível iniciar o GitHub Actions (HTTP "+status+").");
 }
 
+/**
+ * Read-only GitHub identity check for the exact token mounted in Codespaces.
+ * Never proves Actions:write: the ONLY proof of dispatch permission is a real,
+ * explicit user-initiated workflow dispatch that GitHub accepts.
+ */
+export type ReaCredentialStatus =
+  "TOKEN_MISSING"|"TOKEN_AUTHENTICATED"|"TOKEN_OTHER_ACCOUNT"|
+  "TOKEN_REJECTED"|"GITHUB_FORBIDDEN"|"RATE_LIMITED"|"UNAVAILABLE";
+export async function checkReaCredential(
+    http:typeof fetch=fetch,getToken:()=>string=readDispatchSecret
+):Promise<{status:ReaCredentialStatus;actions_write_verified:false}>{
+  const token=getToken();
+  if(!token || !token.trim())return {status:"TOKEN_MISSING",actions_write_verified:false};
+  const abort=new AbortController();
+  const timeout=setTimeout(()=>abort.abort(),6500);
+  try{
+    const response=await http("https://api.github.com/user",{
+      method:"GET",redirect:"error",cache:"no-store",
+      headers:{
+        Accept:"application/vnd.github+json",
+        "X-GitHub-Api-Version":"2026-03-10",
+        Authorization:"Bearer "+token,
+        "User-Agent":"NEXUS071-readonly-credential-check"
+      },
+      signal:abort.signal
+    });
+    if(response.status===401)return {status:"TOKEN_REJECTED",actions_write_verified:false};
+    if(response.status===403||response.status===429)
+      return {status:response.headers.get("x-ratelimit-remaining")==="0"
+        ?"RATE_LIMITED":"GITHUB_FORBIDDEN",actions_write_verified:false};
+    if(!response.ok)return {status:"UNAVAILABLE",actions_write_verified:false};
+    const length=Number(response.headers.get("content-length")||0);
+    if(length>20000)return {status:"UNAVAILABLE",actions_write_verified:false};
+    const body=await response.text();
+    if(body.length>20000)return {status:"UNAVAILABLE",actions_write_verified:false};
+    const login=(JSON.parse(body) as {login?:unknown}).login;
+    if(typeof login!=="string")return {status:"UNAVAILABLE",actions_write_verified:false};
+    return {status:login.toLowerCase()==="lucasom825"?
+      "TOKEN_AUTHENTICATED":"TOKEN_OTHER_ACCOUNT",actions_write_verified:false};
+  }catch{
+    return {status:"UNAVAILABLE",actions_write_verified:false};
+  }finally{clearTimeout(timeout);}
+}
+
 export async function dispatchRea070(input:NewReaRequest,
     http:typeof fetch=fetch, getToken:()=>string=readDispatchSecret):Promise<DispatchResult> {
   const token=getToken();

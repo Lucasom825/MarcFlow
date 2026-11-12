@@ -12,6 +12,9 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
   const [configLoading,setConfigLoading]=useState(true);
   const [working,setWorking]=useState(false);
   const [error,setError]=useState("");
+  const [credentialStatus,setCredentialStatus]=useState("");
+  const [checkingCredential,setCheckingCredential]=useState(false);
+  const [credentialError,setCredentialError]=useState("");
   const [runId,setRunId]=useState<number|null>(null);
   const [workflowUrl,setWorkflowUrl]=useState("");
   const [state,setState]=useState<State|null>(null);
@@ -98,6 +101,30 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
     }catch(e){setError(e instanceof Error?e.message:"Falha no pedido");}
     finally{setWorking(false);}
   }
+  async function diagnoseCredential(){
+    if(checkingCredential)return;
+    setCheckingCredential(true);setCredentialError("");setCredentialStatus("");
+    try{
+      const response=await fetch("/api/nexus/rea/config?diagnose=1",{
+        cache:"no-store",credentials:"same-origin"
+      });
+      if(!response.ok)throw new Error("Sessão inválida ou diagnóstico indisponível.");
+      const data=await response.json();
+      const status=typeof data.credential_check?.status==="string"?
+        data.credential_check.status:"UNAVAILABLE";
+      const messages:Record<string,string>={
+        TOKEN_MISSING:"O token não está montado no servidor.",
+        TOKEN_AUTHENTICATED:"GitHub reconheceu o token como pertencente à conta esperada. Isso NÃO comprova Actions:write nem acesso ao fork REA.",
+        TOKEN_OTHER_ACCOUNT:"GitHub reconheceu a credencial, mas ela pertence a outra conta. Confirme se essa conta tem acesso autorizado ao fork REA.",
+        TOKEN_REJECTED:"GitHub rejeitou o token (401): ele pode ter expirado, sido revogado ou substituído no GitHub.",
+        GITHUB_FORBIDDEN:"GitHub bloqueou até a consulta de identidade. Confira políticas de acesso e permissões.",
+        RATE_LIMITED:"Limite de API atingido; não repita solicitações até a liberação.",
+        UNAVAILABLE:"Não foi possível concluir o diagnóstico de identidade. Nenhuma análise foi solicitada."
+      };
+      setCredentialStatus(messages[status]||messages.UNAVAILABLE);
+    }catch(e){setCredentialError(e instanceof Error?e.message:"Diagnóstico indisponível");}
+    finally{setCheckingCredential(false);}
+  }
   const report=state?.report;
   const checks=report?.checks as Record<string,number>|undefined;
   const source=report?.target as Record<string,string>|undefined;
@@ -113,7 +140,7 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
         <AlertTriangle className="h-4 w-4 shrink-0"/>
         <span>A integração de envio ainda não foi autorizada no servidor. A pré-análise e os relatórios existentes continuam funcionando. A permissão necessária é GitHub Actions:write restrita ao repositório REA, armazenada exclusivamente como segredo do Codespaces.</span>
       </div>:
-      <p className="text-xs text-emerald-800">Conector GitHub Actions configurado no servidor.</p>}
+      <p className="text-xs text-emerald-800">Segredo do GitHub detectado no servidor; autorização Actions:write ainda não confirmada.</p>}
     {wrongBrowserOrigin&&<div role="alert" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
       <p><strong>Endereço de acesso diferente do configurado.</strong> Você abriu o NEXUS por outro endereço. Por segurança, a solicitação REA está bloqueada.</p>
       <a href={canonicalDemoUrl} className="inline-flex items-center gap-1 font-semibold underline">
@@ -126,6 +153,15 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
       {working?"Solicitando...":"Solicitar análise estática"}
     </button>
     {error&&<p role="alert" className="text-sm text-amber-800">{error}</p>}
+    {ready&&<div className="space-y-2 border-t border-emerald-200 pt-3 text-sm">
+      <button type="button" disabled={checkingCredential} onClick={()=>void diagnoseCredential()}
+        className="rounded-lg border border-emerald-700 px-3 py-2 text-emerald-900 disabled:opacity-50">
+        {checkingCredential?"Verificando...":"Verificar credencial (sem iniciar análise)"}
+      </button>
+      {credentialStatus&&<p role="status" className="text-amber-900">{credentialStatus}</p>}
+      {credentialError&&<p role="alert" className="text-amber-900">{credentialError}</p>}
+      <p className="text-xs text-muted-foreground">Esta consulta de leitura nunca executa a REA, não mostra o token e não comprova permissão de escrita no GitHub.</p>
+    </div>}
     {workflowUrl&&<a href={workflowUrl} target="_blank" rel="noreferrer"
       className="inline-flex items-center gap-1 text-sm text-emerald-800 underline">Consultar workflow no GitHub <ExternalLink className="h-4 w-4"/></a>}
     {runId&&<div className="rounded-lg border bg-card p-3 space-y-3 text-sm">
