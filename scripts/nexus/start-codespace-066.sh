@@ -37,6 +37,15 @@ source "$envfile"
 set +a
 export NEXUS_DEMO_ORIGIN="$origin"
 args=(compose --env-file "$envfile" -f scripts/nexus/compose.demo-064.yml)
+# NEXUS 071: optional Codespaces secret. Docker Compose mounts this as a read-only
+# /run/secrets file rather than placing the access token in app environment or .env.
+# No secret => old demo config, no dispatch and no change to saved drafts.
+if [[ -n "${NEXUS_REA_DISPATCH_TOKEN:-}" ]]; then
+  args+=(-f scripts/nexus/compose.rea-071.secrets.yml)
+  echo "NEXUS REA: autorizacao Codespaces detectada; usando montagem segura de segredo."
+else
+  echo "NEXUS REA: envio desabilitado ate autorizacao Codespaces."
+fi
 docker "${args[@]}" config --quiet
 docker "${args[@]}" up -d --build
 echo ""

@@ -3,6 +3,8 @@ import {auth} from "@/lib/auth";
 import {validateRea070Request,dispatchRea070,reaDispatchReady,Rea070Error}
   from "@/lib/nexus-rea-general-070";
 import {PreflightError} from "@/lib/nexus-public-preflight";
+import {diagnoseReaDemoOrigin} from "@/lib/nexus-rea-demo-origin";
+import {checkReaCsrfPolicy} from "@/lib/nexus-rea-csrf-071";
 export const runtime="nodejs"; export const dynamic="force-dynamic";
 const cooldown=new Map<string,number>();
 export async function POST(request:NextRequest){
@@ -10,10 +12,32 @@ export async function POST(request:NextRequest){
   const session=await auth();
   if(session?.user?.email?.toLowerCase()!=="demo@nexus.invalid")
     return NextResponse.json({error:"Login de demonstração exigido."},{status:401});
-  // Require browser same-origin, never accept a blind cross-site dispatch.
-  const origin=request.headers.get("origin");
-  if(!origin || origin!==request.nextUrl.origin)
-    return NextResponse.json({error:"Origem não autorizada."},{status:403});
+  // The public origin is set once by the trusted Codespaces bootstrap.
+  // Auth.js's AUTH_URL may be auto-derived from proxy headers and must NOT
+  // be used as the independent CSRF allowlist. Never trust browser Host,
+  // forwarded headers or user-controlled URLs to authorize GitHub dispatch.
+  const originDiagnostic=diagnoseReaDemoOrigin(
+    request.headers.get("origin"),process.env.NEXUS_REA_ALLOWED_ORIGIN);
+  const proofStatus=checkReaCsrfPolicy({
+    originStatus:originDiagnostic,
+    fetchSite:request.headers.get("sec-fetch-site"),
+    fetchMode:request.headers.get("sec-fetch-mode"),
+    fetchDest:request.headers.get("sec-fetch-dest"),
+    proof:request.headers.get("x-nexus-rea-proof"),
+    userId:String(session.user.id??""),
+    trustedOrigin:process.env.NEXUS_REA_ALLOWED_ORIGIN,
+    secret:process.env.AUTH_SECRET
+  });
+  if(proofStatus!=="CSRF_OK")
+    return NextResponse.json({
+      error:"Solicitação não autorizada pela proteção do navegador.",
+      code:proofStatus,
+      origin_code:originDiagnostic,
+      diagnostic_version:"NEXUS071_CSRF_4"
+    },{status:403,headers:{"Cache-Control":"private, no-store","Vary":"Origin, Sec-Fetch-Site"}});
+  // Origin mismatch caused by a proxy is tolerated ONLY with the signed proof,
+  // a valid Auth.js demo session, and same-origin browser Fetch Metadata.
+  // No cross-site, missing header, forged origin or simple-form fallback.
   if(!reaDispatchReady())
     return NextResponse.json({error:"A autorização segura do GitHub Actions não foi conectada ao servidor."},{status:503});
   if(Number(request.headers.get("content-length")||0)>2000)

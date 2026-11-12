@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   parseRea070Request,validateRea070Request,dispatchRea070,getRea070RunState,validateRunId,
-  Rea070Error,reaDispatchReady,runInfoPath,runSummaryPath,fetchRea070Public
+  Rea070Error,reaDispatchReady,runInfoPath,runSummaryPath,fetchRea070Public,
+  classifyReaDispatchFailure,checkReaCredential
 } from "../../src/lib/nexus-rea-general-070";
 import {allowNexusDemoApi} from "../../src/lib/nexus-demo-policy";
+import {chooseReaDefaultDirectory} from "../../src/lib/nexus-rea-scope-071";
 
 const sha="a".repeat(40);
 const request={repository:"axios/axios",commit:sha,directory:"lib"};
@@ -17,6 +19,14 @@ test("only bounded public repo, 40-digit commit and safe directory accepted",()=
   {...request,directory:"/lib"},{...request,directory:"lib//a"},{...request,directory:"lib space"},
  ])assert.throws(()=>parseRea070Request(invalid),Rea070Error);
 });
+test("default REA scope prefers actual application sources over Axios tests",()=>{
+ assert.equal(chooseReaDefaultDirectory(["tests","lib","examples"]),"lib");
+ assert.equal(chooseReaDefaultDirectory(["test","src","docs"]),"src");
+ assert.equal(chooseReaDefaultDirectory(["__tests__","fixtures","packages/core"]),"packages/core");
+ assert.equal(chooseReaDefaultDirectory(["tests"]),"tests");
+ assert.equal(chooseReaDefaultDirectory([]),"");
+});
+
 test("full server re-validation rejects stale SHA, license and unexpected scope",async()=>{
  const good={license_allowlisted_for_toolkit:true,pinned_sha:sha,candidate_js_directories:["lib"],javascript_files:72};
  const mock=(value:Record<string,unknown>)=>async()=>({...good,...value});
@@ -27,16 +37,23 @@ test("full server re-validation rejects stale SHA, license and unexpected scope"
   {candidate_js_directories:["src"]},{javascript_files:0}
  ])await assert.rejects(()=>validateRea070Request(request,mock(extra) as any),Rea070Error);
 });
-test("server cannot dispatch without a server-only secret",async()=>{
- const old=process.env.NEXUS_REA_DISPATCH_TOKEN;
- delete process.env.NEXUS_REA_DISPATCH_TOKEN;
- assert.equal(reaDispatchReady(),false);
- await assert.rejects(()=>dispatchRea070(request),Rea070Error);
- if(old!==undefined)process.env.NEXUS_REA_DISPATCH_TOKEN=old;
+test("server cannot dispatch without a mounted secret; shell environment is ignored",async()=>{
+ const old=process.env.NEXUS_REA_DISPATCH_TOKEN_FILE;
+ const accidental=process.env.NEXUS_REA_DISPATCH_TOKEN;
+ delete process.env.NEXUS_REA_DISPATCH_TOKEN_FILE;
+ process.env.NEXUS_REA_DISPATCH_TOKEN="fake-token-that-must-not-enable-dispatch";
+ try{
+   assert.equal(reaDispatchReady(),false);
+   await assert.rejects(()=>dispatchRea070(request),Rea070Error);
+   assert.equal(reaDispatchReady(()=>"fake-unit-test-token"),true);
+ }finally{
+   if(old===undefined)delete process.env.NEXUS_REA_DISPATCH_TOKEN_FILE;
+   else process.env.NEXUS_REA_DISPATCH_TOKEN_FILE=old;
+   if(accidental===undefined)delete process.env.NEXUS_REA_DISPATCH_TOKEN;
+   else process.env.NEXUS_REA_DISPATCH_TOKEN=accidental;
+ }
 });
 test("dispatch uses only fixed API host, branch, workflow and public source-only inputs",async()=>{
- const old=process.env.NEXUS_REA_DISPATCH_TOKEN;
- process.env.NEXUS_REA_DISPATCH_TOKEN="fake-unit-test-only-not-real";
  let called=false;
  const http=async(url:string|URL|Request,init?:RequestInit)=>{
    called=true;
@@ -45,22 +62,80 @@ test("dispatch uses only fixed API host, branch, workflow and public source-only
    assert.equal((init?.headers as Record<string,string>)?.["X-GitHub-Api-Version"],"2026-03-10");
    assert.deepEqual(JSON.parse(String(init?.body)),{
      ref:"nexus/rea-public-jobs-070-20261111",
+     return_run_details:true,
      inputs:{target:"public",repository:"axios/axios",commit:sha,directory:"lib"}
    });
    return new Response(JSON.stringify({workflow_run_id:43012345000}),{status:200});
  };
- try{
-   const out=await dispatchRea070(request,http as typeof fetch);
-   assert.equal(called,true);assert.equal(out.status,"TRACKABLE");
-   assert.equal(out.run_id,43012345000);
- }finally{if(old===undefined)delete process.env.NEXUS_REA_DISPATCH_TOKEN;else process.env.NEXUS_REA_DISPATCH_TOKEN=old;}
+ const out=await dispatchRea070(request,http as typeof fetch,()=>"fake-unit-test-only");
+ assert.equal(called,true);assert.equal(out.status,"TRACKABLE");
+ assert.equal(out.run_id,43012345000);
 });
+test("dispatch reports bounded GitHub errors without exposing upstream body or token",async()=>{
+ const cases:[number,string,string|null][]=[
+  [401,"GITHUB_AUTH_401",null],
+  [403,"GITHUB_FORBIDDEN_403",null],
+  [403,"GITHUB_RATE_LIMIT","0"],
+  [404,"GITHUB_WORKFLOW_404",null],
+  [422,"GITHUB_DISPATCH_422",null],
+  [429,"GITHUB_RATE_LIMIT",null],
+  [500,"DISPATCH_FAILED",null]
+ ];
+ for(const [status,code,remaining] of cases){
+   const classified=classifyReaDispatchFailure(status,remaining);
+   assert.equal(classified.code,code);
+   assert.match(classified.message,new RegExp(String(status)));
+   assert.doesNotMatch(classified.message,/secret-upstream-body|token-secret-value/);
+   const mock=async()=>new Response("secret-upstream-body",{
+     status,headers:remaining===null?{}:{"x-ratelimit-remaining":remaining}
+   });
+   await assert.rejects(
+     ()=>dispatchRea070(request,mock as typeof fetch,()=>"token-secret-value"),
+     (e:unknown)=>e instanceof Rea070Error && e.code===code &&
+       !e.message.includes("secret-upstream-body") &&
+       !e.message.includes("token-secret-value")
+   );
+ }
+});
+
+test("read-only credential diagnostic does not dispatch or expose token",async()=>{
+ const calls:string[]=[];
+ const valid=async(url:string|URL|Request,init?:RequestInit)=>{
+   calls.push(String(url));
+   assert.equal(String(url),"https://api.github.com/user");
+   assert.equal(init?.method,"GET");
+   assert.equal((init?.headers as Record<string,string>)?.Authorization,"Bearer synthetic-credential");
+   assert.equal(init?.body,undefined);
+   return new Response(JSON.stringify({login:"Lucasom825"}),{status:200});
+ };
+ assert.deepEqual(await checkReaCredential(valid as typeof fetch,()=>"synthetic-credential"),
+   {status:"TOKEN_AUTHENTICATED",actions_write_verified:false});
+ assert.deepEqual(await checkReaCredential(valid as typeof fetch,()=>""),{
+   status:"TOKEN_MISSING",actions_write_verified:false
+ });
+ assert.deepEqual(calls,["https://api.github.com/user"]);
+ const other=async()=>new Response(JSON.stringify({login:"different-account"}),{status:200});
+ assert.equal((await checkReaCredential(other as typeof fetch,()=>"synthetic-credential")).status,
+   "TOKEN_OTHER_ACCOUNT");
+ const invalid=async()=>new Response(null,{status:401});
+ assert.equal((await checkReaCredential(invalid as typeof fetch,()=>"synthetic-credential")).status,
+   "TOKEN_REJECTED");
+ const limited=async()=>new Response(null,{
+   status:403,headers:{"x-ratelimit-remaining":"0"}
+ });
+ assert.equal((await checkReaCredential(limited as typeof fetch,()=>"synthetic-credential")).status,
+   "RATE_LIMITED");
+ const denied=async()=>new Response(null,{status:403});
+ assert.equal((await checkReaCredential(denied as typeof fetch,()=>"synthetic-credential")).status,
+   "GITHUB_FORBIDDEN");
+ const broken=async()=>{throw new Error("synthetic-token-must-not-leak")};
+ assert.equal((await checkReaCredential(broken as typeof fetch,()=>"synthetic-credential")).status,
+   "UNAVAILABLE");
+});
+
 test("legacy 204 no-run-ID response is not invented",async()=>{
- const old=process.env.NEXUS_REA_DISPATCH_TOKEN;process.env.NEXUS_REA_DISPATCH_TOKEN="fake";
- try{
-   const result=await dispatchRea070(request,(async()=>new Response(null,{status:204})) as typeof fetch);
-   assert.deepEqual({state:result.status,id:result.run_id},{state:"SUBMITTED_UNTRACKED",id:null});
- }finally{if(old===undefined)delete process.env.NEXUS_REA_DISPATCH_TOKEN;else process.env.NEXUS_REA_DISPATCH_TOKEN=old;}
+ const result=await dispatchRea070(request,(async()=>new Response(null,{status:204})) as typeof fetch,()=>"fake-unit-test");
+ assert.deepEqual({state:result.status,id:result.run_id},{state:"SUBMITTED_UNTRACKED",id:null});
 });
 test("status is restricted to correct workflow branch and event",async()=>{
  const runId=43012345000,repo="Lucasom825/rea";
