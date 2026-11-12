@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   parseRea070Request,validateRea070Request,dispatchRea070,getRea070RunState,validateRunId,
-  Rea070Error,reaDispatchReady,runInfoPath,runSummaryPath,fetchRea070Public
+  Rea070Error,reaDispatchReady,runInfoPath,runSummaryPath,fetchRea070Public,
+  classifyReaDispatchFailure
 } from "../../src/lib/nexus-rea-general-070";
 import {allowNexusDemoApi} from "../../src/lib/nexus-demo-policy";
 
@@ -61,6 +62,33 @@ test("dispatch uses only fixed API host, branch, workflow and public source-only
  assert.equal(called,true);assert.equal(out.status,"TRACKABLE");
  assert.equal(out.run_id,43012345000);
 });
+test("dispatch reports bounded GitHub errors without exposing upstream body or token",async()=>{
+ const cases:[number,string,string|null][]=[
+  [401,"GITHUB_AUTH_401",null],
+  [403,"GITHUB_FORBIDDEN_403",null],
+  [403,"GITHUB_RATE_LIMIT","0"],
+  [404,"GITHUB_WORKFLOW_404",null],
+  [422,"GITHUB_DISPATCH_422",null],
+  [429,"GITHUB_RATE_LIMIT",null],
+  [500,"DISPATCH_FAILED",null]
+ ];
+ for(const [status,code,remaining] of cases){
+   const classified=classifyReaDispatchFailure(status,remaining);
+   assert.equal(classified.code,code);
+   assert.match(classified.message,new RegExp(String(status)));
+   assert.doesNotMatch(classified.message,/secret-upstream-body|token-secret-value/);
+   const mock=async()=>new Response("secret-upstream-body",{
+     status,headers:remaining===null?{}:{"x-ratelimit-remaining":remaining}
+   });
+   await assert.rejects(
+     ()=>dispatchRea070(request,mock as typeof fetch,()=>"token-secret-value"),
+     (e:unknown)=>e instanceof Rea070Error && e.code===code &&
+       !e.message.includes("secret-upstream-body") &&
+       !e.message.includes("token-secret-value")
+   );
+ }
+});
+
 test("legacy 204 no-run-ID response is not invented",async()=>{
  const result=await dispatchRea070(request,(async()=>new Response(null,{status:204})) as typeof fetch,()=>"fake-unit-test");
  assert.deepEqual({state:result.status,id:result.run_id},{state:"SUBMITTED_UNTRACKED",id:null});
