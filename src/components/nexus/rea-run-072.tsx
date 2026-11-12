@@ -124,7 +124,7 @@ export function Rea072RunPanel({runId}:{runId:number}){
       </div>
       <div className="flex flex-wrap gap-4">
         <a href={summaryUrl} target="_blank" rel="noreferrer" className="text-emerald-800 underline">Resumo JSON publicado</a>
-        <a href={state.url+"/artifacts/"+report.artifact_id} target="_blank" rel="noreferrer"
+        <a href={"https://github.com/Lucasom825/rea/actions/runs/"+runId+"/artifacts/"+report.artifact_id} target="_blank" rel="noreferrer"
           className="text-emerald-800 underline">Evidência original da análise</a>
       </div>
     </div>}
