@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ReaVerifiedReport } from "@/components/nexus/rea-verified-report";
 import { Rea070Request } from "@/components/nexus/rea-070-request";
+import { Rea072RunPanel } from "@/components/nexus/rea-run-072";
 import { chooseReaDefaultDirectory } from "@/lib/nexus-rea-scope-071";
 import { ExternalLink, GitBranch, ShieldCheck, Search, Copy, AlertTriangle } from "lucide-react";
 
@@ -24,6 +25,12 @@ export default function ReaPreflightPage() {
   const [scope, setScope] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [resumeRunId,setResumeRunId] = useState<number|null>(null);
+  useEffect(()=>{
+    const id=new URLSearchParams(window.location.search).get("rea_run");
+    if(id&&/^[1-9][0-9]{0,15}$/.test(id)&&Number.isSafeInteger(Number(id)))
+      setResumeRunId(Number(id));
+  },[]);
   async function inspect(event: FormEvent) {
     event.preventDefault();
     setLoading(true); setError(""); setResult(null); setScope(""); setCopied(false);
@@ -51,7 +58,7 @@ export default function ReaPreflightPage() {
     <div className="mx-auto max-w-5xl space-y-6 pb-14">
       <header className="space-y-2">
         <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
-          <GitBranch className="h-4 w-4" /> NEXUS 070 · análise supervisionada de código público
+          <GitBranch className="h-4 w-4" /> NEXUS 072 · relatórios verificáveis por execução
         </div>
         <h1 className="text-3xl font-bold text-foreground">Explorar repositório com a REA</h1>
         <p className="text-sm text-muted-foreground">
@@ -60,6 +67,7 @@ export default function ReaPreflightPage() {
         </p>
       </header>
 
+      {!result && resumeRunId && <Rea072RunPanel runId={resumeRunId}/>}
       <ReaVerifiedReport />
 
       <form onSubmit={inspect} className="rounded-2xl border bg-card p-5 space-y-3">

@@ -144,10 +144,14 @@ test("status is restricted to correct workflow branch and event",async()=>{
    schema:"NEXUS_REA_PUBLIC_SUMMARY_V1",source:repo,run_id:runId,
    run_url:"https://github.com/"+repo+"/actions/runs/"+runId,artifact_id:6001,
    status:"COBERTURA_ESTRUTURAL_COM_RESSALVAS",report_sha256:"f".repeat(64),
+   evidence_id:"ev_"+"e".repeat(64),created_at:"2026-11-12T17:34:27.760Z",
+   structural_hubs:[{module:"utils.js",direct_dependents:30}],
+   uncertainties:["REA_EXTRA_SITES_WITH_OTHER_SOURCE_LINE"],
    target:{repository:"axios/axios",directory:"lib",commit:sha},
    checks:{source_executed:false,behavior_test_verified:false,ast_js_files:72,rea_parsed_js:72,
     matched_import_sites:200,ast_import_sites:200,
-    ast_unique_internal_import_pairs:178,additional_rea_unreconciled:7}
+    ast_unique_internal_import_pairs:178,additional_rea_unreconciled:7,
+    rea_semantic_unknowns:13641}
  };
  const get=async(path:string)=>{
    if(path===runInfoPath(runId))return run;
@@ -156,6 +160,27 @@ test("status is restricted to correct workflow branch and event",async()=>{
  };
  const out=await getRea070RunState(runId,get as typeof fetchRea070Public);
  assert.equal(out.state,"completed");assert.equal(out.report?.status,report.status);
+ assert.deepEqual((out.report as Record<string,any>)?.structural_hubs,report.structural_hubs);
+ assert.deepEqual((out.report as Record<string,any>)?.uncertainties,report.uncertainties);
+ assert.equal((out.report as Record<string,any>)?.evidence_id,report.evidence_id);
+ assert.equal((out.report as Record<string,any>)?.checks?.rea_semantic_unknowns,13641);
+ for(const tampered of [
+  {...report,evidence_id:"invalid"},
+  {...report,structural_hubs:[{module:"../secret",direct_dependents:30}]},
+  {...report,structural_hubs:[{module:"utils.js",direct_dependents:-1}]},
+  {...report,checks:{...report.checks,matched_import_sites:201}},
+  {...report,uncertainties:["X".repeat(200)]}
+ ]){
+   const getAltered=async(path:string)=>{
+     if(path===runInfoPath(runId))return run;
+     if(path===runSummaryPath(runId))return {
+       type:"file",encoding:"base64",content:Buffer.from(JSON.stringify(tampered)).toString("base64")
+     };
+     throw Error("Unexpected "+path);
+   };
+   await assert.rejects(()=>getRea070RunState(runId,getAltered as typeof fetchRea070Public),
+     (e:unknown)=>e instanceof Rea070Error && e.code==="INVALID_SUMMARY");
+ }
  for(const bad of [
    {...run,head_branch:"main"},{...run,event:"push"},{...run,id:33},
    {...run,path:"secrets.yml"},{...run,repository:{full_name:"other/repo"}}
