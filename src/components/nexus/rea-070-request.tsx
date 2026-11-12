@@ -61,16 +61,28 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
     if(!ready||!allowed||working||wrongBrowserOrigin)return;
     setWorking(true);setError("");setState(null);
     try{
+      // Refresh the signed, time-limited proof immediately before each request.
+      // The secret itself is never exposed to the browser, only this proof.
+      const cfgResponse=await fetch("/api/nexus/rea/config",{
+        cache:"no-store",credentials:"same-origin"
+      });
+      if(!cfgResponse.ok)throw new Error("Não foi possível verificar a sessão REA.");
+      const cfg=await cfgResponse.json();
+      const proof=typeof cfg.dispatch_proof==="string" ? cfg.dispatch_proof : "";
+      if(cfg.configured!==true || !proof)
+        throw new Error("Proteção de solicitação indisponível; confira a sessão e a configuração.");
       const response=await fetch("/api/nexus/rea/request",{
         method:"POST",credentials:"same-origin",cache:"no-store",
-        headers:{"Content-Type":"application/json"},
+        headers:{"Content-Type":"application/json","X-NEXUS-REA-Proof":proof},
         body:JSON.stringify({repository:target.repository,commit:target.pinned_sha,directory:scope})
       });
       const data=await response.json();
       if(!response.ok)throw new Error(
         (data.error||"Não foi possível criar o job.")+
         (typeof data.code==="string" ? " [Código: "+data.code+"]" : "")+
-        (data.diagnostic_version==="NEXUS071_ORIGIN_DIAG_2" ?
+        (typeof data.origin_code==="string" ? " [Origem: "+data.origin_code+"]" : "")+
+        (data.diagnostic_version==="NEXUS071_CSRF_4" ?
+          " [Proteção 071.4]" : data.diagnostic_version==="NEXUS071_ORIGIN_DIAG_2" ?
           " [Diagnóstico 071.2]" : data.diagnostic_version==="NEXUS071_ORIGIN_DIAG_1" ?
           " [Diagnóstico 071.1]" : "")
       );
