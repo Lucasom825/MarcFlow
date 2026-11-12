@@ -20,7 +20,8 @@ export function chooseReaDefaultDirectory(candidates:readonly string[]):string {
   for(const preferred of ["src","lib","source","app"]){
     if(candidates.includes(preferred))return preferred;
   }
-  return candidates.find(path=>!/(^|\\/)(?:tests?|__tests__|fixtures?)(?:\\/|$)/i.test(path))
+  return candidates.find(path=>!path.split("/").some(part=>
+    ["test","tests","__tests__","fixture","fixtures"].includes(part.toLowerCase())))
     ?? candidates[0] ?? "";
 }
 
