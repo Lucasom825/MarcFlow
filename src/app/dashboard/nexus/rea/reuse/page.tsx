@@ -1,6 +1,7 @@
 "use client";
 
 import {useEffect,useState} from "react";
+import Link from "next/link";
 import {Rea073ReusePanel} from "@/components/nexus/rea-reuse-073";
 
 export default function ReaReusePage(){
@@ -20,5 +21,14 @@ export default function ReaReusePage(){
       </p>
     </div>
     <Rea073ReusePanel runId={runId}/>
+    <section className="rounded-xl border p-4 text-sm">
+      <p className="font-semibold">Próxima prova: funcionamento de uma pendência fictícia</p>
+      <p className="mt-1 text-muted-foreground">
+        Protótipo próprio em memória, sem importar nem executar Express ou TodoMVC,
+        sem vínculo com as tarefas reais do Memora.
+      </p>
+      <Link className="mt-2 inline-block font-semibold text-emerald-800 underline"
+        href="/dashboard/nexus/rea/lab">Abrir laboratório NEXUS 074</Link>
+    </section>
   </main>;
 }
