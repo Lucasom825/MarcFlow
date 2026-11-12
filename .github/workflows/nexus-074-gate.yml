@@ -1,0 +1,64 @@
+name: NEXUS 074 - isolated functional proof of concept
+on:
+  push:
+    branches: [nexus/rea-functional-lab-074-20261112]
+permissions:
+  contents: read
+jobs:
+  functional-lab-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated lab branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: npm ci without dependency installation scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate client for TypeScript test only
+        run: npx --no-install prisma generate
+      - name: Functional behavior tests and existing NEXUS security regressions
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-functional-lab-074.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-reuse-073.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-run-072.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-general-070.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-csrf-071.ts
+          npx --no-install tsx --test scripts/nexus/test-demo-origin-071.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-report-069.ts
+          npx --no-install tsx --test scripts/nexus/test-public-preflight-067.ts
+      - name: Demo and editor regressions
+        run: |
+          node --experimental-strip-types --test scripts/nexus/test-demo-policy-064.mjs
+          node --test scripts/nexus/test-drawflow-converter.mjs
+          node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: App TypeScript check
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus074.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus074.temp.json
+          rm tsconfig.nexus074.temp.json
+      - name: No modifications to production, database or restricted services
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=d26409275825cb59b4a8b16546c4dfb10b4ce460
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/files.txt"
+          if grep -Ev '^(src/lib/nexus-functional-lab-074.ts|src/components/nexus/rea-functional-lab-074.tsx|src/app/dashboard/nexus/rea/lab/page.tsx|src/app/dashboard/nexus/rea/reuse/page.tsx|scripts/nexus/test-functional-lab-074.ts|scripts/nexus/NEXUS-074-FUNCTIONAL-LAB.md|\.github/workflows/nexus-074-gate.yml)$' "$RUNNER_TEMP/files.txt"; then
+            echo 'Unexpected change outside approved NEXUS 074 lab'; exit 1
+          fi
+          echo 'NEXUS074_NO_DB_NO_WHATSAPP_NO_EDITOR_NO_SECRETS_CHANGED=true'
