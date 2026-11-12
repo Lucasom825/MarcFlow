@@ -15,16 +15,6 @@ export class Rea070Error extends Error {
   constructor(public code:string,message:string){super(message);}
 }
 export type NewReaRequest={repository:string;commit:string;directory:string};
-/** Prefer application sources over tests for a bounded first-time inspection. */
-export function chooseReaDefaultDirectory(candidates:readonly string[]):string {
-  for(const preferred of ["src","lib","source","app"]){
-    if(candidates.includes(preferred))return preferred;
-  }
-  return candidates.find(path=>!path.split("/").some(part=>
-    ["test","tests","__tests__","fixture","fixtures"].includes(part.toLowerCase())))
-    ?? candidates[0] ?? "";
-}
-
 export function parseRea070Request(value:unknown):NewReaRequest {
   if(!value || typeof value!=="object" || Array.isArray(value))throw new Rea070Error("INVALID_INPUT","Dados inválidos.");
   const o=value as Record<string,unknown>,{repository,commit,directory}=o;
