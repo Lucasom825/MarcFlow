@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { ReaVerifiedReport } from "@/components/nexus/rea-verified-report";
 import { Rea070Request } from "@/components/nexus/rea-070-request";
-import { chooseReaDefaultDirectory } from "@/lib/nexus-rea-general-070";
+import { chooseReaDefaultDirectory } from "@/lib/nexus-rea-scope-071";
 import { ExternalLink, GitBranch, ShieldCheck, Search, Copy, AlertTriangle } from "lucide-react";
 
 type Preflight = {
