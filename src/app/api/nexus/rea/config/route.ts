@@ -1,12 +1,14 @@
 import {NextResponse} from "next/server";
 import {auth} from "@/lib/auth";
 import {reaDispatchReady} from "@/lib/nexus-rea-general-070";
+import {canonicalReaDemoPage} from "@/lib/nexus-rea-demo-origin";
 export const runtime="nodejs"; export const dynamic="force-dynamic";
 export async function GET(){
   if(process.env.NEXUS_DEMO_ONLY!=="true")return NextResponse.json({error:"Indisponível."},{status:404});
   const s=await auth();
   if(s?.user?.email?.toLowerCase()!=="demo@nexus.invalid")
     return NextResponse.json({error:"Acesso à demonstração exigido."},{status:401});
-  return NextResponse.json({configured:reaDispatchReady(),mode:"PUBLIC_STATIC_ONLY"},
+  return NextResponse.json({configured:reaDispatchReady(),mode:"PUBLIC_STATIC_ONLY",
+    canonical_demo_url:canonicalReaDemoPage(process.env.NEXUS_REA_ALLOWED_ORIGIN)},
     {headers:{"Cache-Control":"private, no-store"}});
 }
