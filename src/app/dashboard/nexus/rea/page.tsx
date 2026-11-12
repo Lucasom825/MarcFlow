@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { ReaVerifiedReport } from "@/components/nexus/rea-verified-report";
 import { Rea070Request } from "@/components/nexus/rea-070-request";
+import { chooseReaDefaultDirectory } from "@/lib/nexus-rea-general-070";
 import { ExternalLink, GitBranch, ShieldCheck, Search, Copy, AlertTriangle } from "lucide-react";
 
 type Preflight = {
@@ -33,7 +34,7 @@ export default function ReaPreflightPage() {
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "Não foi possível consultar o GitHub.");
       setResult(json as Preflight);
-      setScope((json as Preflight).candidate_js_directories[0] || "");
+      setScope(chooseReaDefaultDirectory((json as Preflight).candidate_js_directories));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao consultar o projeto.");
     } finally { setLoading(false); }
