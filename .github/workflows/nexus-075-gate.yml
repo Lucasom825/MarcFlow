@@ -1,0 +1,65 @@
+name: NEXUS 075 - task contract zero-write safety
+on:
+  push:
+    branches: [nexus/rea-memora-contract-075-20261112]
+permissions:
+  contents: read
+jobs:
+  contract-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout experimental NEXUS 075
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install dependencies without postinstall scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client for TypeScript only
+        run: npx --no-install prisma generate
+      - name: Execute contract and security regression tests
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-memora-contract-075.ts
+          npx --no-install tsx --test scripts/nexus/test-functional-lab-074.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-reuse-073.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-run-072.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-general-070.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-csrf-071.ts
+          npx --no-install tsx --test scripts/nexus/test-demo-origin-071.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-report-069.ts
+          npx --no-install tsx --test scripts/nexus/test-public-preflight-067.ts
+      - name: Existing demo and editor regressions
+        run: |
+          node --experimental-strip-types --test scripts/nexus/test-demo-policy-064.mjs
+          node --test scripts/nexus/test-drawflow-converter.mjs
+          node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Typecheck app only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus075.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus075.temp.json
+          rm tsconfig.nexus075.temp.json
+      - name: Verify production and secret paths are unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=3e51848b4feb36d148e8bd561d5f8bd64468be7e
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/change-list.txt"
+          if grep -Ev '^(src/lib/nexus-memora-contract-075.ts|src/components/nexus/nexus-memora-contract-075.tsx|src/app/dashboard/nexus/rea/memora-contract/page.tsx|src/app/dashboard/nexus/rea/lab/page.tsx|scripts/nexus/test-memora-contract-075.ts|scripts/nexus/NEXUS-075-MEMORA-CONTRACT.md|\.github/workflows/nexus-075-gate.yml)$' "$RUNNER_TEMP/change-list.txt"; then
+            echo "Unexpected protected path modified"; exit 1
+          fi
+          echo "NEXUS075_PRODUCTION_DB_EDITOR_WHATSAPP_SECRETS_UNCHANGED=true"
