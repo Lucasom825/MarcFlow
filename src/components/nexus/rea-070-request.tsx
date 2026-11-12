@@ -8,6 +8,7 @@ type State={run_id:number;state:"queued"|"in_progress"|"completed"|"result_pendi
 
 export function Rea070Request({target,scope}:{target:Target;scope:string}){
   const [ready,setReady]=useState(false);
+  const [canonicalDemoUrl,setCanonicalDemoUrl]=useState("");
   const [configLoading,setConfigLoading]=useState(true);
   const [working,setWorking]=useState(false);
   const [error,setError]=useState("");
@@ -19,7 +20,11 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
     let active=true;
     fetch("/api/nexus/rea/config",{cache:"no-store",credentials:"same-origin"})
       .then(async r=>r.ok?await r.json():{configured:false})
-      .then(data=>{if(active){setReady(data.configured===true);setConfigLoading(false);}})
+      .then(data=>{if(active){
+        setReady(data.configured===true);
+        setCanonicalDemoUrl(typeof data.canonical_demo_url==="string" ? data.canonical_demo_url : "");
+        setConfigLoading(false);
+      }})
       .catch(()=>{if(active){setReady(false);setConfigLoading(false);}});
     const match=new URLSearchParams(window.location.search).get("rea_run");
     if(match && /^[1-9][0-9]{0,15}$/.test(match) && Number.isSafeInteger(Number(match)))
@@ -48,8 +53,12 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
   },[runId]);
 
   const allowed=target.license_allowlisted_for_toolkit&&target.javascript_files>0&&Boolean(scope);
+  // Read-only navigation hint. No change to the strict server-side Origin check.
+  const expectedOrigin=canonicalDemoUrl ? (()=>{try{return new URL(canonicalDemoUrl).origin;}catch{return "";}})() : "";
+  const wrongBrowserOrigin=Boolean(expectedOrigin &&
+    typeof window!=="undefined" && window.location.origin!==expectedOrigin);
   async function submit(){
-    if(!ready||!allowed||working)return;
+    if(!ready||!allowed||working||wrongBrowserOrigin)return;
     setWorking(true);setError("");setState(null);
     try{
       const response=await fetch("/api/nexus/rea/request",{
@@ -93,7 +102,14 @@ export function Rea070Request({target,scope}:{target:Target;scope:string}){
         <span>A integração de envio ainda não foi autorizada no servidor. A pré-análise e os relatórios existentes continuam funcionando. A permissão necessária é GitHub Actions:write restrita ao repositório REA, armazenada exclusivamente como segredo do Codespaces.</span>
       </div>:
       <p className="text-xs text-emerald-800">Conector GitHub Actions configurado no servidor.</p>}
-    <button type="button" onClick={()=>void submit()} disabled={!ready||!allowed||working}
+    {wrongBrowserOrigin&&<div role="alert" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+      <p><strong>Endereço de acesso diferente do configurado.</strong> Você abriu o NEXUS por outro endereço. Por segurança, a solicitação REA está bloqueada.</p>
+      <a href={canonicalDemoUrl} className="inline-flex items-center gap-1 font-semibold underline">
+        Abrir o NEXUS pelo endereço correto <ExternalLink className="h-4 w-4"/>
+      </a>
+      <p className="text-xs">Se o login for solicitado novamente, use a conta de demonstração já configurada. Não compartilhe senhas.</p>
+    </div>}
+    <button type="button" onClick={()=>void submit()} disabled={!ready||!allowed||working||wrongBrowserOrigin}
       className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45">
       {working?"Solicitando...":"Solicitar análise estática"}
     </button>
