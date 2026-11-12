@@ -115,8 +115,9 @@ export default function ReaPreflightPage() {
           <section className="rounded-2xl border bg-card p-5 space-y-3">
             <h2 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck className="h-5 w-5 text-emerald-600" /> Próxima etapa: REA real</h2>
             <p className="text-sm text-muted-foreground">
-              A REA executa análise estática em um workflow do seu fork. Esta tela apenas prepara os parâmetros.
-              Ela não aciona o workflow automaticamente nem atesta funcionamento do aplicativo.
+              A pré-análise lista metadados públicos sem executar código externo.
+              Para solicitar a análise estática na REA pelo GitHub Actions, use o botão abaixo com sessão e autorização seguras.
+              Isso não testa o funcionamento do aplicativo nem o reconstrói.
             </p>
             <label htmlFor="nexus-scope" className="text-sm font-medium">Pasta de JavaScript para inspecionar na REA</label>
             <select id="nexus-scope" className="w-full rounded-lg border bg-background p-3 text-sm"
