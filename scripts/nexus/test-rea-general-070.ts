@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import {
   parseRea070Request,validateRea070Request,dispatchRea070,getRea070RunState,validateRunId,
   Rea070Error,reaDispatchReady,runInfoPath,runSummaryPath,fetchRea070Public,
-  classifyReaDispatchFailure,chooseReaDefaultDirectory
+  classifyReaDispatchFailure
 } from "../../src/lib/nexus-rea-general-070";
 import {allowNexusDemoApi} from "../../src/lib/nexus-demo-policy";
+import {chooseReaDefaultDirectory} from "../../src/lib/nexus-rea-scope-071";
 
 const sha="a".repeat(40);
 const request={repository:"axios/axios",commit:sha,directory:"lib"};
