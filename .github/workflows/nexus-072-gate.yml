@@ -1,0 +1,62 @@
+name: NEXUS 072 - traceable static REA run results
+on:
+  push:
+    branches: [nexus/rea-results-072-20261112]
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout experimental NEXUS 072 only
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install without postinstall scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client for typecheck only
+        run: npx --no-install prisma generate
+      - name: Validate NEXUS 072 run-specific reporting and existing REA protections
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-rea-run-072.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-general-070.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-csrf-071.ts
+          npx --no-install tsx --test scripts/nexus/test-demo-origin-071.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-report-069.ts
+          npx --no-install tsx --test scripts/nexus/test-public-preflight-067.ts
+      - name: Existing demo and editor regressions
+        run: |
+          node --experimental-strip-types --test scripts/nexus/test-demo-policy-064.mjs
+          node --test scripts/nexus/test-drawflow-converter.mjs
+          node --experimental-strip-types --test scripts/nexus/test-marcflow-contract.mjs
+      - name: Validate application types
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus072.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus072.temp.json
+          rm tsconfig.nexus072.temp.json
+      - name: Guard editor database and WhatsApp paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=3a93990136e5e6c8f90862f2c4cc4d161c5ed274
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/changes.txt"
+          if grep -Ev '^(src/lib/nexus-rea-general-070.ts|src/components/nexus/rea-070-request.tsx|src/components/nexus/rea-run-072.tsx|src/app/dashboard/nexus/rea/page.tsx|scripts/nexus/test-rea-general-070.ts|scripts/nexus/test-rea-run-072.ts|scripts/nexus/NEXUS-072-RELATORIOS.md|\.github/workflows/nexus-072-gate.yml)$' "$RUNNER_TEMP/changes.txt"; then
+            echo 'Unexpected files changed'; exit 1
+          fi
+          echo 'NEXUS072_PROTECTED_PATHS_UNCHANGED=true'
