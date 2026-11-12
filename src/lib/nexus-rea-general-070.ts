@@ -80,6 +80,7 @@ export async function dispatchRea070(input:NewReaRequest,
       },
       body:JSON.stringify({
         ref:REA_GENERAL_REF,
+        return_run_details:true,
         inputs:{target:"public",repository:input.repository,commit:input.commit,directory:input.directory}
       }),
       signal:controller.signal
