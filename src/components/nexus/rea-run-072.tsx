@@ -123,6 +123,8 @@ export function Rea072RunPanel({runId}:{runId:number}){
         <p className="break-all">SHA-256 do relatório: {report.report_sha256}</p>
       </div>
       <div className="flex flex-wrap gap-4">
+        <a href={"/dashboard/nexus/rea/reuse?rea_run="+runId}
+          className="font-semibold text-emerald-800 underline">Avaliar aproveitamento no NEXUS 073</a>
         <a href={summaryUrl} target="_blank" rel="noreferrer" className="text-emerald-800 underline">Resumo JSON publicado</a>
         <a href={"https://github.com/Lucasom825/rea/actions/runs/"+runId+"/artifacts/"+report.artifact_id} target="_blank" rel="noreferrer"
           className="text-emerald-800 underline">Evidência original da análise</a>
