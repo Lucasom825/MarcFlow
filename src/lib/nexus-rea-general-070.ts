@@ -59,6 +59,34 @@ export function validateRunId(input:unknown):number{
     throw new Rea070Error("INVALID_RUN","Identificador de execução inválido.");
   return Number(s);
 }
+/**
+ * GitHub dispatch failures are deliberately classified without exposing tokens,
+ * response bodies, URLs supplied by callers, or authentication headers.
+ * 403 does not by itself prove the token lacks Actions:write.
+ */
+export function classifyReaDispatchFailure(status:number, rateLimitRemaining:string|null=null):Rea070Error {
+  if(status===401)
+    return new Rea070Error("GITHUB_AUTH_401",
+      "GitHub recusou a credencial (HTTP 401). Confira se o token do Codespaces está válido, não expirou ou foi revogado.");
+  if((status===403 || status===429) && rateLimitRemaining==="0")
+    return new Rea070Error("GITHUB_RATE_LIMIT",
+      "GitHub bloqueou a solicitação por limite de API (HTTP "+status+"). Não gere outro token; confira o limite antes de repetir.");
+  if(status===403)
+    return new Rea070Error("GITHUB_FORBIDDEN_403",
+      "GitHub proibiu a solicitação (HTTP 403). Confira acesso do token ao fork Lucasom825/rea e permissão Actions: Read and write; políticas do GitHub também podem bloquear.");
+  if(status===404)
+    return new Rea070Error("GITHUB_WORKFLOW_404",
+      "GitHub não encontrou ou não permitiu acessar o workflow (HTTP 404). Confira acesso do token ao repositório e workflow.");
+  if(status===422)
+    return new Rea070Error("GITHUB_DISPATCH_422",
+      "GitHub rejeitou a referência ou os parâmetros do workflow (HTTP 422). Verifique a branch fixa e o workflow configurado.");
+  if(status===429)
+    return new Rea070Error("GITHUB_RATE_LIMIT",
+      "GitHub limitou temporariamente solicitações à API (HTTP 429).");
+  return new Rea070Error("DISPATCH_FAILED",
+    "Não foi possível iniciar o GitHub Actions (HTTP "+status+").");
+}
+
 export async function dispatchRea070(input:NewReaRequest,
     http:typeof fetch=fetch, getToken:()=>string=readDispatchSecret):Promise<DispatchResult> {
   const token=getToken();
@@ -87,10 +115,7 @@ export async function dispatchRea070(input:NewReaRequest,
     });
   } finally {clearTimeout(abort);}
   if(!response.ok)
-    throw new Rea070Error("DISPATCH_FAILED",
-      response.status===401 || response.status===403 ?
-        "Autorização recusada pelo GitHub. Verifique permissão Actions:write restrita ao fork REA.":
-        "Não foi possível iniciar o GitHub Actions (HTTP "+response.status+").");
+    throw classifyReaDispatchFailure(response.status,response.headers.get("x-ratelimit-remaining"));
   const workflow_url="https://github.com/"+REA_GENERAL_REPO+"/actions/workflows/"+REA_GENERAL_WORKFLOW;
   // Versioned GitHub API returns the run ID. Older versions may return 204.
   if(response.status===204)return {status:"SUBMITTED_UNTRACKED",run_id:null,workflow_url};
