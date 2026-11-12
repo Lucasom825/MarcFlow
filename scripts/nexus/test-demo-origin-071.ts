@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {isAuthorizedReaDemoOrigin,diagnoseReaDemoOrigin} from "../../src/lib/nexus-rea-demo-origin";
+import {isAuthorizedReaDemoOrigin,diagnoseReaDemoOrigin,canonicalReaDemoPage} from "../../src/lib/nexus-rea-demo-origin";
 const publicOrigin="https://automatic-space-system-4jw456q6ppjr265x-39164.app.github.dev";
 test("GitHub Codespaces forwarded HTTPS origin equals trusted AUTH_URL",()=>{
   assert.equal(isAuthorizedReaDemoOrigin(publicOrigin, publicOrigin),true);
@@ -68,4 +68,34 @@ test("REA checks independent immutable Codespaces URL, never Auth.js AUTH_URL or
   assert.match(bootstrap,/export NEXUS_DEMO_ORIGIN="\$origin"/);
   assert.equal(diagnoseReaDemoOrigin(publicOrigin,publicOrigin),"ORIGIN_OK");
   assert.equal(diagnoseReaDemoOrigin("https://evil.example",publicOrigin),"ORIGIN_MISMATCH");
+});
+
+
+test("canonical URL points only to fixed Codespaces port and never disables origin guard",()=>{
+  assert.equal(canonicalReaDemoPage(publicOrigin),publicOrigin+"/dashboard/nexus/rea");
+  const refused=[
+    "https://evil.example",
+    "https://evil.example-39164.app.github.dev.evil.example",
+    "https://automatic-space-system-4jw456q6ppjr265x-39165.app.github.dev",
+    "http://automatic-space-system-4jw456q6ppjr265x-39164.app.github.dev",
+    publicOrigin+"/auth/login",
+    "https://a:pass@automatic-space-system-4jw456q6ppjr265x-39164.app.github.dev",
+    "https://automatic-space-system-4jw456q6ppjr265x-39164.app.github.dev:8443",
+    "https://127.0.0.1",
+  ];
+  for(const bad of refused)assert.equal(canonicalReaDemoPage(bad),null,bad);
+  assert.equal(canonicalReaDemoPage(undefined),null);
+  assert.equal(isAuthorizedReaDemoOrigin("https://evil.example",publicOrigin),false);
+});
+
+test("canonical URL is read-only and available only on existing authenticated demo endpoint",()=>{
+  const config=readFileSync("src/app/api/nexus/rea/config/route.ts","utf8");
+  const request=readFileSync("src/app/api/nexus/rea/request/route.ts","utf8");
+  const ui=readFileSync("src/components/nexus/rea-070-request.tsx","utf8");
+  assert.match(config,/await auth\(\)/);
+  assert.match(config,/canonicalReaDemoPage\(process\.env\.NEXUS_REA_ALLOWED_ORIGIN\)/);
+  assert.match(request,/diagnoseReaDemoOrigin/);
+  assert.match(request,/process\.env\.NEXUS_REA_ALLOWED_ORIGIN/);
+  assert.match(ui,/wrongBrowserOrigin/);
+  assert.match(ui,/disabled=\{!ready\|\|!allowed\|\|working\|\|wrongBrowserOrigin\}/);
 });
