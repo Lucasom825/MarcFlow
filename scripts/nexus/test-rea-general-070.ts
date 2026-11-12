@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   parseRea070Request,validateRea070Request,dispatchRea070,getRea070RunState,validateRunId,
   Rea070Error,reaDispatchReady,runInfoPath,runSummaryPath,fetchRea070Public,
-  classifyReaDispatchFailure
+  classifyReaDispatchFailure,chooseReaDefaultDirectory
 } from "../../src/lib/nexus-rea-general-070";
 import {allowNexusDemoApi} from "../../src/lib/nexus-demo-policy";
 
@@ -18,6 +18,14 @@ test("only bounded public repo, 40-digit commit and safe directory accepted",()=
   {...request,directory:"/lib"},{...request,directory:"lib//a"},{...request,directory:"lib space"},
  ])assert.throws(()=>parseRea070Request(invalid),Rea070Error);
 });
+test("default REA scope prefers actual application sources over Axios tests",()=>{
+ assert.equal(chooseReaDefaultDirectory(["tests","lib","examples"]),"lib");
+ assert.equal(chooseReaDefaultDirectory(["test","src","docs"]),"src");
+ assert.equal(chooseReaDefaultDirectory(["__tests__","fixtures","packages/core"]),"packages/core");
+ assert.equal(chooseReaDefaultDirectory(["tests"]),"tests");
+ assert.equal(chooseReaDefaultDirectory([]),"");
+});
+
 test("full server re-validation rejects stale SHA, license and unexpected scope",async()=>{
  const good={license_allowlisted_for_toolkit:true,pinned_sha:sha,candidate_js_directories:["lib"],javascript_files:72};
  const mock=(value:Record<string,unknown>)=>async()=>({...good,...value});
