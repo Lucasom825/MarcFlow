@@ -4,6 +4,7 @@ import {validateRea070Request,dispatchRea070,reaDispatchReady,Rea070Error}
   from "@/lib/nexus-rea-general-070";
 import {PreflightError} from "@/lib/nexus-public-preflight";
 import {diagnoseReaDemoOrigin} from "@/lib/nexus-rea-demo-origin";
+import {checkReaCsrfPolicy} from "@/lib/nexus-rea-csrf-071";
 export const runtime="nodejs"; export const dynamic="force-dynamic";
 const cooldown=new Map<string,number>();
 export async function POST(request:NextRequest){
@@ -17,12 +18,26 @@ export async function POST(request:NextRequest){
   // forwarded headers or user-controlled URLs to authorize GitHub dispatch.
   const originDiagnostic=diagnoseReaDemoOrigin(
     request.headers.get("origin"),process.env.NEXUS_REA_ALLOWED_ORIGIN);
-  if(originDiagnostic!=="ORIGIN_OK")
+  const proofStatus=checkReaCsrfPolicy({
+    originStatus:originDiagnostic,
+    fetchSite:request.headers.get("sec-fetch-site"),
+    fetchMode:request.headers.get("sec-fetch-mode"),
+    fetchDest:request.headers.get("sec-fetch-dest"),
+    proof:request.headers.get("x-nexus-rea-proof"),
+    userId:String(session.user.id??""),
+    trustedOrigin:process.env.NEXUS_REA_ALLOWED_ORIGIN,
+    secret:process.env.AUTH_SECRET
+  });
+  if(proofStatus!=="CSRF_OK")
     return NextResponse.json({
-      error:"Origem não autorizada.",
-      code:originDiagnostic,
-      diagnostic_version:"NEXUS071_ORIGIN_DIAG_2"
-    },{status:403,headers:{"Cache-Control":"private, no-store"}});
+      error:"Solicitação não autorizada pela proteção do navegador.",
+      code:proofStatus,
+      origin_code:originDiagnostic,
+      diagnostic_version:"NEXUS071_CSRF_4"
+    },{status:403,headers:{"Cache-Control":"private, no-store","Vary":"Origin, Sec-Fetch-Site"}});
+  // Origin mismatch caused by a proxy is tolerated ONLY with the signed proof,
+  // a valid Auth.js demo session, and same-origin browser Fetch Metadata.
+  // No cross-site, missing header, forged origin or simple-form fallback.
   if(!reaDispatchReady())
     return NextResponse.json({error:"A autorização segura do GitHub Actions não foi conectada ao servidor."},{status:503});
   if(Number(request.headers.get("content-length")||0)>2000)
