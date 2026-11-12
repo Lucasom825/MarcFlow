@@ -55,3 +55,19 @@ export function diagnoseReaDemoOrigin(
   if(caller.origin!==trusted.origin)return "ORIGIN_MISMATCH";
   return "ORIGIN_OK";
 }
+
+
+/**
+ * Only authenticated demo users can receive the exact bootstrap-approved
+ * Codespaces URL. It is a navigation hint, never an authority override.
+ * The POST CSRF check still requires the browser's actual Origin to match.
+ */
+export function canonicalReaDemoPage(configuredPublicUrl:string|undefined):string|null {
+  if(!configuredPublicUrl) return null;
+  if(diagnoseReaDemoOrigin(configuredPublicUrl,configuredPublicUrl)!=="ORIGIN_OK")return null;
+  const url=new URL(configuredPublicUrl);
+  // This pilot is bound to the forwarded Codespaces demo port. No arbitrary redirect.
+  if(url.protocol!=="https:" || !/^[a-z0-9-]+-39164\.app\.github\.dev$/.test(url.hostname) ||
+     url.port || url.username || url.password)return null;
+  return url.origin+"/dashboard/nexus/rea";
+}
