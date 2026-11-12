@@ -144,7 +144,7 @@ test("status is restricted to correct workflow branch and event",async()=>{
    schema:"NEXUS_REA_PUBLIC_SUMMARY_V1",source:repo,run_id:runId,
    run_url:"https://github.com/"+repo+"/actions/runs/"+runId,artifact_id:6001,
    status:"COBERTURA_ESTRUTURAL_COM_RESSALVAS",report_sha256:"f".repeat(64),
-   artifact_id:6001,evidence_id:"ev_"+"e".repeat(64),created_at:"2026-11-12T17:34:27.760Z",
+   evidence_id:"ev_"+"e".repeat(64),created_at:"2026-11-12T17:34:27.760Z",
    structural_hubs:[{module:"utils.js",direct_dependents:30}],
    uncertainties:["REA_EXTRA_SITES_WITH_OTHER_SOURCE_LINE"],
    target:{repository:"axios/axios",directory:"lib",commit:sha},
