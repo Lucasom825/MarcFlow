@@ -31,7 +31,7 @@ test("NEXUS072 server validates scope and provenance, no arbitrary URL fetch",()
  assert.match(server,/report\.evidence_id/);
  assert.match(server,/report\.report_sha256/);
  assert.match(server,/report\.uncertainties/);
- assert.match(server,/runId\);/);
+ assert.match(server,/get\(runInfoPath\(runId\)\)/);
  assert.match(route,/await auth\(\)/);
  assert.match(route,/getRea070RunState\(validateRunId\(id\)\)/);
 });
