@@ -11,5 +11,13 @@ export default function ReaFunctionalLabPage(){
       </Link>
     </nav>
     <ReaFunctionalLab074/>
+    <section className="rounded-xl border p-4 text-sm">
+      <h2 className="font-semibold">Próxima etapa: contrato de tarefas NEXUS 075</h2>
+      <p className="my-2 text-muted-foreground">Conferir duplicidades e conflitos com dados fictícios,
+      antes de qualquer conexão com o Memora real.</p>
+      <Link href="/dashboard/nexus/rea/memora-contract" className="font-semibold text-emerald-800 underline">
+        Abrir simulação do contrato de tarefas
+      </Link>
+    </section>
   </main>;
 }
