@@ -1,0 +1,59 @@
+name: NEXUS 078 - signed Memora 2 read-only bridge
+on:
+  push:
+    branches: [nexus/memora2-read-bridge-078-20261112]
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated bridge
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Setup Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install locked dependencies without postinstall
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client for typecheck only
+        run: npx --no-install prisma generate
+      - name: Signed bridge tests and previous contract regressions
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-memora2-bridge-078.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-readiness-076.ts
+          npx --no-install tsx --test scripts/nexus/test-memora-contract-075.ts
+          npx --no-install tsx --test scripts/nexus/test-functional-lab-074.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-reuse-073.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-run-072.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-general-070.ts
+          npx --no-install tsx --test scripts/nexus/test-rea-csrf-071.ts
+      - name: Application typecheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus078.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus078.temp.json
+          rm tsconfig.nexus078.temp.json
+      - name: Ensure no demo editor, DB, WhatsApp or secrets changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=a6615a96f62be230420d0ee4b181547514d537ca
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/files.txt"
+          if grep -Ev '^(src/lib/nexus-memora2-bridge-078.ts|src/app/api/nexus/memora2/readiness/route.ts|src/components/nexus/memora2-live-078.tsx|src/app/dashboard/nexus/rea/memora2-live/page.tsx|scripts/nexus/test-memora2-bridge-078.ts|scripts/nexus/NEXUS-078-MEMORA2-BRIDGE.md|\.github/workflows/nexus-078-readiness-gate.yml)$' "$RUNNER_TEMP/files.txt"; then
+            echo 'Unexpected file modified'; exit 1
+          fi
+          echo 'NEXUS078_PRODUCTION_AND_SECRETS_UNCHANGED=true'
