@@ -97,7 +97,7 @@ test("API access never allowed to a demo or unrelated user",()=>{
   const route=readFileSync("src/app/api/nexus/memora2/readiness/route.ts","utf8");
   const page=readFileSync("src/app/dashboard/nexus/rea/memora2-live/page.tsx","utf8");
   assert.match(route,/NEXUS_DEMO_ONLY.*"true"/);
-  assert.match(route,/email!=="demo@nexus.invalid"/);
+  assert.match(route,/email==="demo@nexus.invalid"/);
   assert.match(route,/email!==config.ownerEmail/);
   assert.match(route,/status:405/);
   assert.match(page,/notFound\(\)/);
