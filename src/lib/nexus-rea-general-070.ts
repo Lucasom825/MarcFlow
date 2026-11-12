@@ -239,17 +239,39 @@ export async function getRea070RunState(id:number,
        !Number.isSafeInteger(checks.ast_import_sites) ||
        !Number.isSafeInteger(checks.additional_rea_unreconciled) ||
        !["INCONCLUSIVO","COBERTURA_ESTRUTURAL_COM_RESSALVAS","COBERTURA_ESTRUTURAL_CONFIRMADA"].includes(String(report.status)) ||
-       typeof report.report_sha256!=="string" || !/^[a-f0-9]{64}$/.test(report.report_sha256))
+       typeof report.report_sha256!=="string" || !/^[a-f0-9]{64}$/.test(report.report_sha256) ||
+       !Number.isSafeInteger(report.artifact_id) || Number(report.artifact_id)<1 ||
+       typeof report.evidence_id!=="string" || !/^ev_[a-f0-9]{64}$/.test(report.evidence_id) ||
+       typeof report.created_at!=="string" || !Number.isFinite(Date.parse(report.created_at)) ||
+       !Number.isSafeInteger(checks.rea_semantic_unknowns) ||
+       Number(checks.rea_semantic_unknowns)<0 ||
+       !Array.isArray(report.structural_hubs) || report.structural_hubs.length>8 ||
+       report.structural_hubs.some((h:unknown)=>{
+         if(!h || typeof h!=="object" || Array.isArray(h))return true;
+         const hub=h as Record<string,unknown>;
+         return typeof hub.module!=="string" || hub.module.length<1 ||
+           hub.module.length>120 || hub.module.startsWith("/") ||
+           hub.module.split("/").includes("..") ||
+           !Number.isSafeInteger(hub.direct_dependents) ||
+           Number(hub.direct_dependents)<0 || Number(hub.direct_dependents)>100000;
+       }) ||
+       !Array.isArray(report.uncertainties) || report.uncertainties.length>12 ||
+       report.uncertainties.some((v:unknown)=>typeof v!=="string" || v.length>160) ||
+       Number(checks.matched_import_sites)>Number(checks.ast_import_sites) ||
+       Number(checks.rea_parsed_js)>Number(checks.ast_js_files))
        throw new Rea070Error("INVALID_SUMMARY","Resumo não validado.");
     // Only bounded fields. No dynamic rendering of the raw report or arbitrary URLs.
     const compact={
       target,run_id:runId,status:report.status,artifact_id:report.artifact_id,
-      created_at:report.created_at,checks:{
+      created_at:report.created_at,evidence_id:report.evidence_id,
+      report_sha256:report.report_sha256,
+      structural_hubs:report.structural_hubs,uncertainties:report.uncertainties,checks:{
         ast_js_files:checks.ast_js_files,rea_parsed_js:checks.rea_parsed_js,
         matched_import_sites:checks.matched_import_sites,
         ast_import_sites:checks.ast_import_sites,
         ast_unique_internal_import_pairs:checks.ast_unique_internal_import_pairs,
-        additional_rea_unreconciled:checks.additional_rea_unreconciled
+        additional_rea_unreconciled:checks.additional_rea_unreconciled,
+        rea_semantic_unknowns:checks.rea_semantic_unknowns
       },
       source_executed:false,behavior_test_verified:false
     };
