@@ -2,6 +2,7 @@ import {NextResponse} from "next/server";
 import {auth} from "@/lib/auth";
 import {reaDispatchReady} from "@/lib/nexus-rea-general-070";
 import {canonicalReaDemoPage} from "@/lib/nexus-rea-demo-origin";
+import {makeReaCsrfProof} from "@/lib/nexus-rea-csrf-071";
 export const runtime="nodejs"; export const dynamic="force-dynamic";
 export async function GET(){
   if(process.env.NEXUS_DEMO_ONLY!=="true")return NextResponse.json({error:"Indisponível."},{status:404});
@@ -9,6 +10,7 @@ export async function GET(){
   if(s?.user?.email?.toLowerCase()!=="demo@nexus.invalid")
     return NextResponse.json({error:"Acesso à demonstração exigido."},{status:401});
   return NextResponse.json({configured:reaDispatchReady(),mode:"PUBLIC_STATIC_ONLY",
-    canonical_demo_url:canonicalReaDemoPage(process.env.NEXUS_REA_ALLOWED_ORIGIN)},
+    canonical_demo_url:canonicalReaDemoPage(process.env.NEXUS_REA_ALLOWED_ORIGIN),
+    dispatch_proof:makeReaCsrfProof(String(s.user?.id??""),process.env.NEXUS_REA_ALLOWED_ORIGIN,process.env.AUTH_SECRET)},
     {headers:{"Cache-Control":"private, no-store"}});
 }
