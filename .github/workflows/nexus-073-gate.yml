@@ -57,7 +57,7 @@ jobs:
           BASE=4b389def1972114265a42788ed1893be74e1f840
           git diff --check "$BASE" HEAD
           git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/changes.txt"
-          if grep -Ev '^(src/lib/nexus-rea-reuse-073.ts|src/components/nexus/rea-reuse-073.tsx|src/app/dashboard/nexus/rea/reuse/page.tsx|src/components/nexus/rea-run-072.tsx|scripts/nexus/test-rea-reuse-073.ts|scripts/nexus/NEXUS-073-DOSSIE.md|\.github/workflows/nexus-073-gate.yml)$' "$RUNNER_TEMP/changes.txt"; then
+          if grep -Ev '^(src/lib/nexus-rea-reuse-073.ts|src/components/nexus/rea-reuse-073.tsx|src/app/dashboard/nexus/rea/reuse/page.tsx|src/components/nexus/rea-run-072.tsx|scripts/nexus/test-rea-reuse-073.ts|scripts/nexus/NEXUS-073-DOSSIE.md|scripts/nexus/NEXUS-073-EXPRESS-UTILS-TRIAGE.md|\.github/workflows/nexus-073-gate.yml)$' "$RUNNER_TEMP/changes.txt"; then
             echo 'Files outside approved NEXUS073 pilot changed'; exit 1
           fi
           echo 'NEXUS073_DB_EDITOR_WHATSAPP_CREDENTIALS_UNCHANGED=true'
