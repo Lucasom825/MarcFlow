@@ -52,6 +52,7 @@ test("dispatch uses only fixed API host, branch, workflow and public source-only
    assert.equal((init?.headers as Record<string,string>)?.["X-GitHub-Api-Version"],"2026-03-10");
    assert.deepEqual(JSON.parse(String(init?.body)),{
      ref:"nexus/rea-public-jobs-070-20261111",
+     return_run_details:true,
      inputs:{target:"public",repository:"axios/axios",commit:sha,directory:"lib"}
    });
    return new Response(JSON.stringify({workflow_run_id:43012345000}),{status:200});
