@@ -1,0 +1,62 @@
+name: PILOTO - NEXUS read-only Memora 2 selected modules
+on:
+  push:
+    branches: [pilot/memora2-readonly-20261113]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-curated-nexus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout main-derived release candidate (no push tokens)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install only locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client (does not connect MySQL)
+        run: npx --no-install prisma generate
+      - name: Validate read-only payload, HMAC v2, owner identity and JWT revalidation
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-memora2-readiness-076.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-bridge-078.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-identity-083.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-hmac-bound-084.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-db-reauth-085.ts
+      - name: All application TypeScript compile checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.pilot-memora2.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.pilot-memora2.temp.json
+          rm tsconfig.pilot-memora2.temp.json
+      - name: Verify only reviewed modules and no DB/config deployment changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check aa105ccd21a5adb8b5db342e884f8219fc7d1bc7 HEAD
+          git diff --name-only aa105ccd21a5adb8b5db342e884f8219fc7d1bc7 HEAD > "$RUNNER_TEMP/pilot-paths"
+          if grep -Ev '^(src/lib/nexus-memora2-readiness-076.ts|src/lib/nexus-memora2-bridge-078.ts|src/lib/nexus-memora2-bridge-084.ts|src/lib/nexus-memora2-identity-083.ts|src/lib/nexus-memora2-db-reauth-085.ts|src/app/api/nexus/memora2/readiness/route.ts|src/app/dashboard/nexus/rea/memora2-live/page.tsx|src/components/nexus/memora2-live-078.tsx|scripts/nexus/test-memora2-readiness-076.ts|scripts/nexus/test-memora2-bridge-078.ts|scripts/nexus/test-memora2-identity-083.ts|scripts/nexus/test-memora2-hmac-bound-084.ts|scripts/nexus/test-memora2-db-reauth-085.ts|scripts/nexus/PILOTO-MEMORA2-READONLY.md|\.github/workflows/pilot-memora2-readonly-20261113.yml)$' "$RUNNER_TEMP/pilot-paths"; then
+            echo 'BLOCKED: unauthorized code or configuration in pilot branch'; exit 1
+          fi
+          test ! -e scripts/nexus/experiments/access-086-sqlite.mjs
+          grep -Fq 'if(process.env.NEXUS_DEMO_ONLY==="true")' src/app/api/nexus/memora2/readiness/route.ts
+          grep -Fq 'readMemora2Bridge084' src/app/api/nexus/memora2/readiness/route.ts
+          grep -Fq 'await revalidateNexusUser085' src/app/api/nexus/memora2/readiness/route.ts
+          echo 'MAIN_DERIVED_CURATED_PILOT=true'
+          echo 'NO_PRISMA_MIGRATION_PRODUCTION_CONFIGURATION_OR_REAL_DB=true'
+          echo 'REAL_DATA_ACTIVATION_NOT_AUTHORIZED=true'
