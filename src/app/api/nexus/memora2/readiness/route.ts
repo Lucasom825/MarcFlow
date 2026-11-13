@@ -1,6 +1,8 @@
 import {NextResponse} from "next/server";
 import {evaluateNexusIdentity083,readNexusOwnerGrant083} from "@/lib/nexus-memora2-identity-083";
 import {readMemora2Bridge084} from "@/lib/nexus-memora2-bridge-084";
+import {revalidateNexusUser085} from "@/lib/nexus-memora2-db-reauth-085";
+import {prisma} from "@/lib/prisma";
 import {auth} from "@/lib/auth";
 import {
   bridgeConfig078,Bridge078Error
@@ -27,6 +29,17 @@ export async function GET(){
   },config.ownerEmail);
   if(!decision.allowed)
     return NextResponse.json({error:"Não autorizado."},{status:403,headers:H});
+  // Session JWT is not sufficient: re-read the current User for every request.
+  // No external Memora call is made when DB is missing or identity was changed.
+  const current=await revalidateNexusUser085({
+    user:{findUnique:args=>prisma.user.findUnique(args)}
+  },{
+    id:session?.user?.id,email,role:session?.user?.role
+  });
+  if(!current.allowed)
+    return NextResponse.json({error:"Consulta não autorizada."},{
+      status:current.reason==="DATABASE_UNAVAILABLE"?503:403,headers:H
+    });
   // v2 only: bind the approved owner UUID and grant ID in the HMAC payload.
   const grant=readNexusOwnerGrant083(process.env);
   if(!grant)return NextResponse.json({error:"Não autorizado."},{status:403,headers:H});
