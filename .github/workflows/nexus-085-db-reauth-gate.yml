@@ -1,0 +1,58 @@
+name: NEXUS 085 - live DB user revalidation gate
+on:
+  push:
+    branches: [nexus/memora2-db-reauth-085-20261113]
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout experimental branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install pinned dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client for compile-time checking only
+        run: npx --no-install prisma generate
+      - name: Simulated database revalidation and earlier access gates
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-memora2-db-reauth-085.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-hmac-bound-084.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-identity-083.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-bridge-078.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-readiness-076.ts
+          npx --no-install tsx --test scripts/nexus/test-memora-contract-075.ts
+      - name: Application TypeScript check
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus085.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus085.temp.json
+          rm tsconfig.nexus085.temp.json
+      - name: Check protected production, Prisma and deployment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=ae67cabe939e63b5e0da52932d5450293257c22b
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/changes.txt"
+          if grep -Ev '^(src/lib/nexus-memora2-db-reauth-085.ts|src/app/api/nexus/memora2/readiness/route.ts|src/app/dashboard/nexus/rea/memora2-live/page.tsx|scripts/nexus/test-memora2-db-reauth-085.ts|scripts/nexus/NEXUS-085-DB-REAUTH.md|\.github/workflows/nexus-085-db-reauth-gate.yml)$' "$RUNNER_TEMP/changes.txt"; then
+            echo 'Unapproved file outside the isolated Memora 2 live read gate'; exit 1
+          fi
+          echo 'PRISMA_SCHEMA_AND_MIGRATIONS_UNCHANGED=true'
+          echo 'NO_PRODUCTION_DEPLOY_OR_DB_CONNECTION=true'
