@@ -1,0 +1,55 @@
+name: NEXUS 083 - revoked and expiring owner identity gate
+on:
+  push:
+    branches: [nexus/memora2-identity-083-20261113]
+permissions:
+  contents: read
+jobs:
+  identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated NEXUS 083
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client for typecheck only
+        run: npx --no-install prisma generate
+      - name: Test grant, revoked, subject-ID and owner binding
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-memora2-identity-083.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-bridge-078.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-readiness-076.ts
+          npx --no-install tsx --test scripts/nexus/test-memora-contract-075.ts
+      - name: Application TypeScript check
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus083.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus083.temp.json
+          rm tsconfig.nexus083.temp.json
+      - name: Ensure no application, DB, editor or secret config changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=789384bf2334cfce07b54368bcc67f3f4a5addb8
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
+          if grep -Ev '^(src/lib/nexus-memora2-identity-083.ts|src/app/api/nexus/memora2/readiness/route.ts|src/app/dashboard/nexus/rea/memora2-live/page.tsx|scripts/nexus/test-memora2-identity-083.ts|scripts/nexus/NEXUS-083-IDENTITY-RFC.md|\.github/workflows/nexus-083-identity-gate.yml)$' "$RUNNER_TEMP/changed.txt"; then
+            echo 'Unexpected change outside NEXUS 083 isolated identity gate'; exit 1
+          fi
+          echo 'NO_PRODUCTION_SECRETS_OR_DATA_CHANGED=true'
