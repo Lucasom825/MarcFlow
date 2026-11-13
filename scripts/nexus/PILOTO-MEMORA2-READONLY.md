@@ -46,3 +46,24 @@ A pilha experimental anterior tinha 230 commits e 142 arquivos de diferenças no
 A autorização atual cobre somente desenvolvimento/revisão de branches e testes fictícios. Não altera main, credenciais, Cloudflare produtivo, banco real ou reuniões. Rollback futuro: desligar ambos os lados e revogar segredo; não reabilitar HMAC v1.
 
 Histórico de fontes: https://github.com/Lucasom825/MarcFlow/pull/29 e https://github.com/Lucasom825/memora-2-cloudflare/pull/194 .
+
+## Pré-homologação 087 — autorização de staging isolado (13/11/2026)
+Esta etapa **prepara** a homologação, mas não significa que a integração esteja publicada. O Memora 2 tem modelos de configuração independentes para Web e guard Durable Object, com testes automatizados de separação de KV, identidades e Worker. Ver `docs/NEXUS-STAGING-PREFLIGHT-087.md` no repositório **privado** Memora 2, branch `pilot/nexus-readonly-20261113`. Não copiar conteúdo privado para este repositório público.
+
+### Pré-condições de staging NEXUS
+- Instância separada da aplicação e banco MySQL/Prisma **inteiramente fictício**; nenhum usuário, token, sessão ou conexão ao MySQL real. Não usar `prisma db push` contra banco real.
+- Criar usuário de teste não-demo, com ID, e-mail e papel OWNER ou SUPERADMIN, cadastrados no banco *de staging*. O gate 085 fará uma leitura mínima desse usuário a cada consulta.
+- `NEXUS_DEMO_ONLY=true`, `NEXUS_MEMORA2_BRIDGE_ENABLED=false`, `NEXUS_MEMORA2_IDENTITY_APPROVED=false`, `NEXUS_MEMORA2_IDENTITY_REVOKED=true` até todos os controles serem verificados. Com os flags bloqueados, a rota deve negar sem acessar o Memora.
+- Separar a futura URL HTTPS de staging, `NEXUS_MEMORA2_ALLOWED_HOST`, grant ID, UUID fictício do dono Memora, e credencial HMAC v2 **exclusiva do staging**. Não commitar valores sensíveis e nunca reutilizar segredos produtivos.
+- Revogação persistente no banco MySQL **não está implementada**; a prova SQLite 086 é apenas laboratório. Falta autorização humana cruzada e teste de acesso/rollback em runtime.
+- Sem revisão de quota/consumo da conta Cloudflare e isolamento remoto, não acionar deploy nem ativar o vínculo.
+
+### Sequência de aceite sem atalhos
+1. Testes locais/CI de cada piloto com HEAD conferido, sem acesso externo.
+2. Confirmar isolamento do banco, KV, Durable Object, domínio, Worker, registro de auditoria e limites de gasto.
+3. No ambiente isolado, conferir negação (demo/flag off, usuário revogado, JWT desatualizado, serviço indisponível), assinatura HMAC v2 e replay/rate limit com dados fictícios.
+4. Com concessão sintética expirada em até 30 dias e *apenas depois* de aprovado acesso técnico ao staging, confirmar leitura manual de no máximo oito estados e zero campos confidenciais.
+5. Desabilitar flags, revogar a chave sintética e comprovar negação após rollback; registrar screenshots sem tokens e logs sem conteúdo.
+6. **Decisão NO-GO para produção** até homologação MySQL/Prisma persistente, identidade real/consentimento e autorização específica para alterações produtivas.
+
+O ambiente de Cloudflare não é configurado por este documento. Não trocar dados simulados por reuniões reais para acelerar o teste.
