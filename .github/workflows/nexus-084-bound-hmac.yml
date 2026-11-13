@@ -1,0 +1,56 @@
+name: NEXUS 084 - bound HMAC owner and grant
+on:
+  push:
+    branches: [nexus/memora2-hmac-bound-084-20261113]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Install locked dependencies with no lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client for TypeScript check
+        run: npx --no-install prisma generate
+      - name: HMAC v2 and previously approved security gates
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-memora2-hmac-bound-084.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-identity-083.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-bridge-078.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-readiness-076.ts
+          npx --no-install tsx --test scripts/nexus/test-memora-contract-075.ts
+      - name: Typecheck the app
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus084.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus084.temp.json
+          rm tsconfig.nexus084.temp.json
+      - name: Ensure no DB/production/app security changes beyond isolated route
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=0ce8e7b75d211347094c2e0c3bcab31b35dee99c
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
+          if grep -Ev '^(src/lib/nexus-memora2-bridge-084.ts|src/app/api/nexus/memora2/readiness/route.ts|scripts/nexus/test-memora2-hmac-bound-084.ts|scripts/nexus/NEXUS-084-HMAC-BOUND.md|\.github/workflows/nexus-084-bound-hmac.yml)$' "$RUNNER_TEMP/changed.txt"; then
+            echo 'Unexpected file changed'; exit 1
+          fi
+          echo 'NEXUS084_DRY_RUN_ONLY=true'

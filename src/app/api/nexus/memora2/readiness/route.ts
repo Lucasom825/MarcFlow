@@ -1,8 +1,9 @@
 import {NextResponse} from "next/server";
-import {evaluateNexusIdentity083} from "@/lib/nexus-memora2-identity-083";
+import {evaluateNexusIdentity083,readNexusOwnerGrant083} from "@/lib/nexus-memora2-identity-083";
+import {readMemora2Bridge084} from "@/lib/nexus-memora2-bridge-084";
 import {auth} from "@/lib/auth";
 import {
-  bridgeConfig078,readMemora2Bridge078,Bridge078Error
+  bridgeConfig078,Bridge078Error
 } from "@/lib/nexus-memora2-bridge-078";
 
 export const runtime="nodejs";
@@ -26,8 +27,14 @@ export async function GET(){
   },config.ownerEmail);
   if(!decision.allowed)
     return NextResponse.json({error:"Não autorizado."},{status:403,headers:H});
+  // v2 only: bind the approved owner UUID and grant ID in the HMAC payload.
+  const grant=readNexusOwnerGrant083(process.env);
+  if(!grant)return NextResponse.json({error:"Não autorizado."},{status:403,headers:H});
   try{
-    const result=await readMemora2Bridge078(config);
+    const result=await readMemora2Bridge084(config,{
+      memoraOwnerId:grant.memoraOwnerId,
+      grantId:grant.grantId
+    });
     return NextResponse.json(result,{headers:H});
   }catch(error){
     if(error instanceof Bridge078Error)
