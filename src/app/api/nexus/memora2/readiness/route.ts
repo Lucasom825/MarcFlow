@@ -1,4 +1,5 @@
 import {NextResponse} from "next/server";
+import {evaluateNexusIdentity083} from "@/lib/nexus-memora2-identity-083";
 import {auth} from "@/lib/auth";
 import {
   bridgeConfig078,readMemora2Bridge078,Bridge078Error
@@ -17,6 +18,13 @@ export async function GET(){
   const session=await auth();
   const email=session?.user?.email?.trim().toLowerCase()??"";
   if(!email || email==="demo@nexus.invalid" || email!==config.ownerEmail)
+    return NextResponse.json({error:"Não autorizado."},{status:403,headers:H});
+  // A matching email alone is not a sufficient account-to-owner authorization.
+  // Identity grant is OFF by default; an explicit, bounded, revocable mapping is mandatory.
+  const decision=evaluateNexusIdentity083(process.env,{
+    id:session?.user?.id,email,role:session?.user?.role
+  },config.ownerEmail);
+  if(!decision.allowed)
     return NextResponse.json({error:"Não autorizado."},{status:403,headers:H});
   try{
     const result=await readMemora2Bridge078(config);
