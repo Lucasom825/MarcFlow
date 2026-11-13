@@ -42,7 +42,7 @@ export function readNexusOwnerGrant083(
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/.test(expiry))
     return null;
   const expiresAt=Date.parse(expiry);
-  if(!Number.isFinite(expiresAt) || expiresAt<=now ||
+  if(!Number.isFinite(expiresAt) || new Date(expiresAt).toISOString()!==expiry ||
     expiresAt>now+MAX_GRANT_LIFETIME_MS)return null;
   return {nexusUserId:userId,nexusEmail:email,memoraOwnerId:ownerId,
     grantId,expiresAt};
