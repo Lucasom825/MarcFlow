@@ -1,0 +1,59 @@
+name: NEXUS 086 - synthetic persistent SQLite account/grant proof
+on:
+  push:
+    branches: [nexus/memora2-persistent-access-086-20261113]
+permissions:
+  contents: read
+jobs:
+  isolated-acl:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout only experimental access-control proof
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - name: Synthetic SQLite account status, grants, durable revocation, and audit
+        run: node --experimental-sqlite --test scripts/nexus/test-memora2-persistent-access-086.mjs
+      - name: Install locked package dependencies with no lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client without connecting to the DB
+        run: npx --no-install prisma generate
+      - name: Existing NEXUS 085-084-083-078 read-only regressions
+        run: |
+          npx --no-install tsx --test scripts/nexus/test-memora2-db-reauth-085.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-hmac-bound-084.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-identity-083.ts
+          npx --no-install tsx --test scripts/nexus/test-memora2-bridge-078.ts
+      - name: Application typecheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tsconfig.nexus086.temp.json <<'TSC'
+          {
+            "extends":"./tsconfig.json",
+            "include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx"],
+            "exclude":["node_modules","scripts"]
+          }
+          TSC
+          npx --no-install tsc --noEmit --pretty false --project tsconfig.nexus086.temp.json
+          rm tsconfig.nexus086.temp.json
+      - name: Ensure no production schema, application, DB or secret changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=f84326e5f3c7f31c302816bbb0c1d7a11c3df1d3
+          git diff --check "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > "$RUNNER_TEMP/changed.txt"
+          if grep -Ev '^(scripts/nexus/experiments/access-086-sqlite.mjs|scripts/nexus/test-memora2-persistent-access-086.mjs|scripts/nexus/NEXUS-086-PERSISTENT-ACCESS-DESIGN.md|\.github/workflows/nexus-086-persistent-acl-gate.yml)$' "$RUNNER_TEMP/changed.txt"; then
+            echo 'Unexpected file changed outside experimental access-control proof'; exit 1
+          fi
+          echo 'NO_PRISMA_SCHEMA_OR_MIGRATION_CHANGED=true'
+          echo 'NO_REAL_DATABASE_CONNECTION=true'
+          echo 'NO_MEMORA_READ_OR_DEPLOY=true'
