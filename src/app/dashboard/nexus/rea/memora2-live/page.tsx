@@ -1,5 +1,7 @@
 import {notFound} from "next/navigation";
 import {evaluateNexusIdentity083} from "@/lib/nexus-memora2-identity-083";
+import {revalidateNexusUser085} from "@/lib/nexus-memora2-db-reauth-085";
+import {prisma} from "@/lib/prisma";
 import {auth} from "@/lib/auth";
 import {bridgeConfig078} from "@/lib/nexus-memora2-bridge-078";
 import {NexusMemora2Live078} from "@/components/nexus/memora2-live-078";
@@ -15,5 +17,10 @@ export default async function Memora2LivePage(){
   if(!evaluateNexusIdentity083(process.env,{
     id:session?.user?.id,email,role:session?.user?.role
   },config.ownerEmail).allowed)notFound();
+  // Page and API both fail closed; API still independently checks every read.
+  const current=await revalidateNexusUser085({
+    user:{findUnique:args=>prisma.user.findUnique(args)}
+  },{id:session?.user?.id,email,role:session?.user?.role});
+  if(!current.allowed)notFound();
   return <NexusMemora2Live078/>;
 }
