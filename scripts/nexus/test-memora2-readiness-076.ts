@@ -63,22 +63,15 @@ test("invalid statuses, dates, IDs, duplicates and overlong payloads are rejecte
  assert.throws(()=>parseMemora2Recent076(Array.from({length:9},()=>valid)),/Lista inválida/);
 });
 
-test("only state-specific READINESS is inferred, and no hidden network access",()=>{
- const paths=[
-  "src/lib/nexus-memora2-readiness-076.ts",
-  "src/components/nexus/memora2-readiness-076.tsx",
-  "src/app/dashboard/nexus/rea/memora2-readiness/page.tsx"
- ];
- for(const path of paths){
-  const src=readFileSync(path,"utf8");
-  assert.doesNotMatch(src,/fetch\(|XMLHttpRequest|localStorage|sessionStorage|indexedDB|WebSocket|PrismaClient/);
-  assert.doesNotMatch(src,/dangerouslySetInnerHTML|eval\(|new Function\(/);
-  assert.doesNotMatch(src,/Authorization:|Bearer\s|token=|cookie:/i);
- }
- const view=readFileSync(paths[1],"utf8");
- assert.match(view,/Não conectado ao Memora 2/);
- assert.match(view,/Operações de escrita realizadas:/);
- assert.match(view,/PDF presente não comprova fidelidade da ata/);
- const route=readFileSync("src/app/dashboard/nexus/rea/memora-contract/page.tsx","utf8");
- assert.match(route,/dashboard\/nexus\/rea\/memora2-readiness/);
+test("curated pilot keeps pure parser free of network, storage and executable templates",()=>{
+ const path="src/lib/nexus-memora2-readiness-076.ts";
+ const src=readFileSync(path,"utf8");
+ assert.doesNotMatch(src,/fetch\(|XMLHttpRequest|localStorage|sessionStorage|indexedDB|WebSocket|PrismaClient/);
+ assert.doesNotMatch(src,/dangerouslySetInnerHTML|eval\(|new Function\(/);
+ assert.doesNotMatch(src,/Authorization:|Bearer\s|token=|cookie:/i);
+ // Synthetic DEMO pages from 075/076 are intentionally not copied to this pilot.
+ // Only the authenticated real-readiness page is included, but remains disabled.
+ const live=readFileSync("src/app/dashboard/nexus/rea/memora2-live/page.tsx","utf8");
+ assert.match(live,/NexusMemora2Live078/);
+ assert.match(live,/NEXUS_DEMO_ONLY/);
 });
